@@ -8,30 +8,34 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         movies_created = 0
-        tmdb_data = get_popular_movies(page=1)
 
-        for item in tmdb_data.get("results", []):
-            movie, created = Movie.objects.update_or_create(
-                tmdb_id=item["id"],
-                defaults={
-                    "title": item["title"],
-                    "overview": item.get("overview", ""),
-                    "poster_path": item.get("poster_path", ""),
-                    "backdrop_path": item.get("backdrop_path", ""),
-                    "release_date": item.get("release_date") or None,
-                    "rating": item.get("vote_average"),
-                }
-            )
+        # Fetch multiple pages for a larger pool
+        for page in range(1, 26):  # pages 1–5
+            tmdb_data = get_popular_movies(page=page)
 
-            tmdb_genre_ids = item.get("genre_ids", [])
-            genre_objects = Genre.objects.filter(tmdb_id__in=tmdb_genre_ids)
-            movie.genres.set(genre_objects)
+            for item in tmdb_data.get("results", []):
+                movie, created = Movie.objects.update_or_create(
+                    tmdb_id=item["id"],
+                    defaults={
+                        "title": item["title"],
+                        "overview": item.get("overview", ""),
+                        "poster_path": item.get("poster_path", ""),
+                        "backdrop_path": item.get("backdrop_path", ""),
+                        "release_date": item.get("release_date") or None,
+                        "rating": item.get("vote_average"),
+                    }
+                )
 
-            if created:
-                movies_created += 1
+                # Link genres
+                tmdb_genre_ids = item.get("genre_ids", [])
+                genre_objects = Genre.objects.filter(tmdb_id__in=tmdb_genre_ids)
+                movie.genres.set(genre_objects)
+
+                if created:
+                    movies_created += 1
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Movies synced. New movies created: {movies_created}"
+                f"Movies synced successfully. New movies created: {movies_created}"
             )
         )
