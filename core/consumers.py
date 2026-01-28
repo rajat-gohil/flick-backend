@@ -3,6 +3,7 @@ from .consumers import MatchConsumer
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 
+
 class MatchConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.session_id = self.scope["url_route"]["kwargs"]["session_id"]
@@ -22,13 +23,6 @@ class MatchConsumer(AsyncWebsocketConsumer):
         )
 
     async def match_event(self, event):
-        await self.send(text_data=json.dumps({
-            "type": "match",
-            "session_id": event["session_id"],
-            "movie_id": event["movie_id"],
-            "movie_title": event["movie_title"],
-        }))
-
-websocket_urlpatterns = [
-    path("ws/session/<int:session_id>/", MatchConsumer.as_asgi()),
-]
+        await self.send(
+            text_data=json.dumps(event["data"])
+        )
