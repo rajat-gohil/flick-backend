@@ -354,9 +354,12 @@ class SwipeCreateView(APIView):
                     f"session_{session.id}",
                     {
                         "type": "match_event",
-                        "session_id": session.id,
-                        "movie_id": movie.id,
-                        "movie_title": movie.title,
+                        "data": {
+                            "type": "match_created",
+                            "session_id": session.id,
+                            "movie_id": movie.id,
+                            "movie_title": movie.title,
+                        },
                     }
                 )
 
