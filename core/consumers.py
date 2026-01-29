@@ -1,5 +1,3 @@
-from django.urls import path
-from .consumers import MatchConsumer
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 
@@ -23,6 +21,9 @@ class MatchConsumer(AsyncWebsocketConsumer):
         )
 
     async def match_event(self, event):
-        await self.send(
-            text_data=json.dumps(event["data"])
-        )
+        await self.send(text_data=json.dumps({
+            "type": "match",
+            "session_id": event["session_id"],
+            "movie_id": event["movie_id"],
+            "movie_title": event["movie_title"],
+        }))
