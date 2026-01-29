@@ -13,4 +13,11 @@ echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
 echo "Starting server..."
-gunicorn backend.wsgi:application
+set -o errexit
+
+python manage.py migrate
+python manage.py collectstatic --noinput || true
+
+exec uvicorn backend.asgi:application \
+  --host 0.0.0.0 \
+  --port 10000
