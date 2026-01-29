@@ -72,7 +72,7 @@ class Movie(models.Model):
     title = models.CharField(max_length=255)
     overview = models.TextField(blank=True)
     poster_path = models.CharField(max_length=255, blank=True)
-    backdrop_path = models.CharField(max_length=255, blank=True)
+    backdrop_path = models.CharField(max_length=255, blank=True, null=True)
     release_date = models.DateField(null=True, blank=True)
 
     # Raw TMDB genre IDs (used during sync)
