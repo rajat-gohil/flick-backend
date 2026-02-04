@@ -14,6 +14,7 @@ class GenreSerializer(serializers.ModelSerializer):
 class MovieSerializer(serializers.ModelSerializer):
     poster_url = serializers.SerializerMethodField()
     backdrop_url = serializers.SerializerMethodField()
+    streaming_providers = serializers.JSONField(required=False)
 
     class Meta:
         model = Movie
@@ -26,6 +27,7 @@ class MovieSerializer(serializers.ModelSerializer):
             "rating",
             "backdrop_url",
             "poster_url",
+            "streaming_providers",
         ]
     
     def get_backdrop_url(self,obj):
