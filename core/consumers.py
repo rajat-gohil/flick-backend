@@ -22,8 +22,15 @@ class MatchConsumer(AsyncWebsocketConsumer):
 
     async def match_event(self, event):
         await self.send(text_data=json.dumps({
-            "type": "match",
+            "type": "match_event",
             "session_id": event["session_id"],
             "movie_id": event["movie_id"],
             "movie_title": event["movie_title"],
+        }))
+
+
+    async def session_ended_event(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "session_ended",
+            "session_id": event["session_id"],
         }))

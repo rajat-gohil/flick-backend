@@ -257,6 +257,15 @@ class SessionEndView(APIView):
         session.ended_at = timezone.now()
         session.save()
 
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"session_{session.id}",
+            {
+                "type": "session_ended_event",
+                "session_id": session.id,
+            }
+        )
+
         return Response(
             {"success": True, "message": "Session ended"},
             status=status.HTTP_200_OK
@@ -354,12 +363,9 @@ class SwipeCreateView(APIView):
                     f"session_{session.id}",
                     {
                         "type": "match_event",
-                        "data": {
-                            "type": "match_created",
-                            "session_id": session.id,
-                            "movie_id": movie.id,
-                            "movie_title": movie.title,
-                        },
+                        "session_id": session.id,
+                        "movie_id": movie.id,
+                        "movie_title": movie.title,
                     }
                 )
 
