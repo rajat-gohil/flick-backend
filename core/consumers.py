@@ -34,3 +34,8 @@ class MatchConsumer(AsyncWebsocketConsumer):
             "type": "session_ended",
             "session_id": event["session_id"],
         }))
+    async def swipe_event(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "partner_swiping",
+            "user_id": event["user_id"],
+        }))

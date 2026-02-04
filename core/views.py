@@ -337,6 +337,15 @@ class SwipeCreateView(APIView):
                 movie=movie,
                 reaction=reaction
             )
+            # Notify partner that a swipe happened
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"session_{session.id}",
+                {
+                    "type": "swipe_event",
+                    "user_id": request.user.id,
+                }
+            )
         except IntegrityError:
             return Response(
                 {"success": False, "error": "Already swiped on this movie"},
