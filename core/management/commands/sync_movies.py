@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from core.models import Movie, Genre
 from core.services.tmdb import get_popular_movies
-from core.services.tmdb import get_streaming_providers
+
 
 
 class Command(BaseCommand):
@@ -26,12 +26,8 @@ class Command(BaseCommand):
                         "rating": item.get("vote_average"),
                     }
                 )
-                
-                providers = get_streaming_providers(item["id"])
 
-                movie.streaming_providers = providers
-                movie.save(update_fields=["streaming_providers"])
-                # Link genres
+                                # Link genres
                 tmdb_genre_ids = item.get("genre_ids", [])
                 genre_objects = Genre.objects.filter(tmdb_id__in=tmdb_genre_ids)
                 movie.genres.set(genre_objects)
