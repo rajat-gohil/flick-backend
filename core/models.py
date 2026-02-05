@@ -148,12 +148,8 @@ class Match(models.Model):
     # Data Capture #
 
 class MovieExposure(models.Model):
-    movie = models.OneToOneField(
-        Movie,
-        on_delete=models.CASCADE,
-        related_name="exposure"
-    )
-    exposed_count = models.PositiveIntegerField(default=0)
+    movie = models.OneToOneField(Movie, on_delete=models.CASCADE)
+    exposed_count = models.IntegerField(default=0)
     last_exposed_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
