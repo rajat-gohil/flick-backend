@@ -639,14 +639,54 @@ class RecommendationView(APIView):
             session=session
         ).values_list("movie_id", flat=True)
 
-        # Core recommendation query
-        movies = Movie.objects.filter(
+        now = timezone.now()
+
+        # Base candidate pool
+        candidate_movies = Movie.objects.filter(
             genres=session.genre
         ).exclude(
             id__in=swiped_movie_ids
         ).exclude(
             id__in=matched_movie_ids
-        ).order_by("-rating")[:20]  # limit for swipe deck
+        ).distinct()[:CANDIDATE_POOL_SIZE]
+
+        scored_movies = []
+
+        for movie in candidate_movies:
+            exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
+
+            # Penalize recently exposed movies
+            recently_exposed = (
+                exposure.last_exposed_at and
+                (now - exposure.last_exposed_at).total_seconds() <
+                RECENT_EXPOSURE_COOLDOWN_MINUTES * 60
+            )
+
+            # Penalize globally over-exposed movies
+            over_exposed = exposure.exposed_count >= MAX_GLOBAL_EXPOSURE
+
+            # Soft score (lower is worse)
+            penalty = 0
+            if recently_exposed:
+                penalty += 2
+            if over_exposed:
+                penalty += 3
+
+            scored_movies.append((penalty, movie))
+
+        # Sort by penalty, then shuffle inside penalty groups
+        scored_movies.sort(key=lambda x: x[0])
+
+        grouped = {}
+        for penalty, movie in scored_movies:
+            grouped.setdefault(penalty, []).append(movie)
+
+        final_movies = []
+        for penalty in sorted(grouped.keys()):
+            random.shuffle(grouped[penalty])
+            final_movies.extend(grouped[penalty])
+
+        movies = final_movies[:FINAL_DECK_SIZE]
         for movie in movies:
             exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
             exposure.exposed_count += 1
