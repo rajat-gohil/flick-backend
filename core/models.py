@@ -204,3 +204,31 @@ class UserTasteSignal(models.Model):
 
     class Meta:
         unique_together = ("user", "tag")
+
+class SessionChemistry(models.Model):
+    """
+    Captures what works for a specific pair of users.
+    """
+    user_a = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="chemistry_as_a"
+    )
+    user_b = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="chemistry_as_b"
+    )
+
+    tag = models.CharField(max_length=64)
+
+    match_count = models.PositiveIntegerField(default=0)
+    swipe_count = models.PositiveIntegerField(default=0)
+
+    last_matched_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ("user_a", "user_b", "tag")
+
+    def __str__(self):
+        return f"{self.user_a} + {self.user_b} → {self.tag}"

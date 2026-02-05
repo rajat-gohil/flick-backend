@@ -27,6 +27,8 @@ from .models import Genre
 from .models import MovieExposure
 from .models import SessionStats
 from .models import UserTasteSignal
+from .models import SessionChemistry
+
 
 # -------------------------------------------------------------------
 # Recommendation shaping constants (Phase 2)
@@ -46,6 +48,12 @@ def generate_session_code():
     Generate a short, human-readable session code.
     """
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+def normalize_pair(user1, user2):
+    """
+    Ensures user pair ordering is consistent.
+    """
+    return (user1, user2) if user1.id < user2.id else (user2, user1)
 
 
 # -------------------------------------------------------------------
@@ -402,11 +410,22 @@ class SwipeCreateView(APIView):
 
             if len(set(liked_users)) == 2:
                 Match.objects.create(session=session, movie=movie)
+                user_a, user_b = normalize_pair(session.host, session.guest)
+
+                for tag in movie.tags.all():
+                    chemistry, _ = SessionChemistry.objects.get_or_create(
+                        user_a=user_a,
+                        user_b=user_b,
+                        tag=tag.name
+                    )
+
+                    chemistry.match_count += 1
+                    chemistry.last_matched_at = timezone.now()
+                    chemistry.save(update_fields=["match_count", "last_matched_at"])
                 match_created = True
                 stats, _ = SessionStats.objects.get_or_create(session=session)
                 stats.total_matches += 1
                 stats.save(update_fields=["total_matches"])
-
 
                 # Emit WebSocket event
                 channel_layer = get_channel_layer()
@@ -674,6 +693,22 @@ class RecommendationView(APIView):
         scored_movies = []
 
         for movie in candidate_movies:
+            user_a, user_b = normalize_pair(session.host, session.guest)
+
+            chemistry_bonus = 0
+            for tag in movie.tags.all():
+                try:
+                    chemistry = SessionChemistry.objects.get(
+                        user_a=user_a,
+                        user_b=user_b,
+                        tag=tag.name
+                    )
+                    chemistry_bonus += chemistry.match_count
+                except SessionChemistry.DoesNotExist:
+                    pass
+
+            # Cap influence to avoid overfitting
+            penalty -= min(chemistry_bonus, 4)
             exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
 
             # Penalize recently exposed movies
