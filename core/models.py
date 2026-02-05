@@ -236,4 +236,28 @@ class SessionChemistry(models.Model):
     def __str__(self):
         return f"{self.user_a} + {self.user_b} → {self.tag}"
 
+class MovieTagRelation(models.Model):
+    """
+    Weighted relationship between vibe tags.
+    Example: 'chaotic' -> 'dark humor'
+    """
+    from_tag = models.ForeignKey(
+        "MovieTag",
+        on_delete=models.CASCADE,
+        related_name="outgoing_relations"
+    )
+    to_tag = models.ForeignKey(
+        "MovieTag",
+        on_delete=models.CASCADE,
+        related_name="incoming_relations"
+    )
+
+    weight = models.FloatField(default=1.0)
+
+    class Meta:
+        unique_together = ("from_tag", "to_tag")
+
+    def __str__(self):
+        return f"{self.from_tag} → {self.to_tag} ({self.weight})"
+
 

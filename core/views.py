@@ -28,6 +28,9 @@ from .models import MovieExposure
 from .models import SessionStats
 from .models import UserTasteSignal
 from .models import SessionChemistry
+from .models import MovieTagRelation
+from .models import MovieTag
+
 
 
 # -------------------------------------------------------------------
@@ -35,9 +38,12 @@ from .models import SessionChemistry
 # -------------------------------------------------------------------
 
 RECENT_EXPOSURE_COOLDOWN_MINUTES = 30
-MAX_GLOBAL_EXPOSURE = 50
-CANDIDATE_POOL_SIZE = 60
-FINAL_DECK_SIZE = 20
+MAX_GLOBAL_EXPOSURE = 100
+CANDIDATE_POOL_SIZE = 120
+FINAL_DECK_SIZE = 40
+MIN_DECK_SIZE = 16
+MAX_DECK_SIZE = 50
+
 
 # -------------------------------------------------------------------
 # Utility helpers
@@ -421,8 +427,10 @@ class SwipeCreateView(APIView):
                 {"success": False, "error": "Already swiped on this movie"},
                 status=status.HTTP_409_CONFLICT
             )
-        # --- Taste signal logging (Phase 2B) ---
+        user_a, user_b = normalize_pair(session.host, session.guest)
+
         for tag in movie.tags.all():
+            # Taste signal
             signal, _ = UserTasteSignal.objects.get_or_create(
                 user=request.user,
                 tag=tag
@@ -434,6 +442,16 @@ class SwipeCreateView(APIView):
                 signal.dislike_count += 1
 
             signal.save(update_fields=["like_count", "dislike_count", "last_interacted_at"])
+
+            # Session drift signal
+            chemistry, _ = SessionChemistry.objects.get_or_create(
+                user_a=user_a,
+                user_b=user_b,
+                tag=tag.name
+            )
+
+            chemistry.swipe_count += 1
+            chemistry.save(update_fields=["swipe_count"])
 
 
         # 6. Match detection
@@ -713,6 +731,24 @@ class RecommendationView(APIView):
         ).values_list("movie_id", flat=True)
 
         now = timezone.now()
+        # --- Adaptive deck sizing (Phase 2.4) ---
+        stats, _ = SessionStats.objects.get_or_create(session=session)
+
+        swipes = stats.total_swipes
+        matches = stats.total_matches
+
+        # Default
+        deck_size = FINAL_DECK_SIZE
+
+        if swipes < 10:
+            # Early session → explore
+            deck_size = MAX_DECK_SIZE
+        elif matches >= 2:
+            # High alignment → tighten deck
+            deck_size = MIN_DECK_SIZE
+        elif swipes > 25 and matches == 0:
+            # Low chemistry → reduce fatigue
+            deck_size = 10
 
         # Base candidate pool
         candidate_ids = list(
@@ -732,41 +768,9 @@ class RecommendationView(APIView):
 
         for movie in candidate_movies:
             penalty = 0
-            user_a, user_b = normalize_pair(session.host, session.guest)
-
-            # --- Session chemistry bias (Phase 2C) ---
-            chemistry_bonus = 0
-            for tag in movie.tags.all():
-                try:
-                    chemistry = SessionChemistry.objects.get(
-                        user_a=user_a,
-                        user_b=user_b,
-                        tag=tag.name
-                    )
-                    chemistry_bonus += chemistry.match_count
-                except SessionChemistry.DoesNotExist:
-                    pass
-
-            penalty -= min(chemistry_bonus, 4)
-
-            # --- Exposure penalties (Phase 2A) ---
-            exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
-
-            recently_exposed = (
-                exposure.last_exposed_at and
-                (now - exposure.last_exposed_at).total_seconds()
-                < RECENT_EXPOSURE_COOLDOWN_MINUTES * 60
-            )
-
-            over_exposed = exposure.exposed_count >= MAX_GLOBAL_EXPOSURE
-
-            if recently_exposed:
-                penalty += 2
-            if over_exposed:
-                penalty += 3
-
-            # --- Taste bias (Phase 2B) ---
+            # --- User taste bias (Phase 2B, controlled) ---
             taste_bonus = 0
+
             for tag in movie.tags.all():
                 try:
                     signal = UserTasteSignal.objects.get(
@@ -777,9 +781,61 @@ class RecommendationView(APIView):
                 except UserTasteSignal.DoesNotExist:
                     pass
 
+            # Cap so taste never dominates chemistry
             penalty -= min(taste_bonus, 3)
 
+            # --- Sub-genre graph influence (Phase 2C) ---
+            graph_bonus = 0
+            user_a, user_b = normalize_pair(session.host, session.guest)
+
+            for tag in movie.tags.all():
+                # Direct chemistry
+                try:
+                    chem = SessionChemistry.objects.get(
+                        user_a=user_a,
+                        user_b=user_b,
+                        tag=tag.name
+                    )
+                    graph_bonus += chem.match_count * 2
+                except SessionChemistry.DoesNotExist:
+                    pass
+
+                # Neighboring vibe pull
+                for rel in tag.outgoing_relations.all():
+                    try:
+                        neighbor = SessionChemistry.objects.get(
+                            user_a=user_a,
+                            user_b=user_b,
+                            tag=rel.to_tag.name
+                        )
+                        graph_bonus += rel.weight * neighbor.match_count
+                    except SessionChemistry.DoesNotExist:
+                        pass
+
+            # Cap influence
+            penalty -= min(graph_bonus, 5)
+
+            user_a, user_b = normalize_pair(session.host, session.guest)
+
+            # ----------------------------------
+            # 1. Base exposure penalties
+            # ----------------------------------
+            exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
+
+            recently_exposed = (
+                exposure.last_exposed_at and
+                (now - exposure.last_exposed_at).total_seconds() <
+                RECENT_EXPOSURE_COOLDOWN_MINUTES * 60
+            )
+
+            if recently_exposed:
+                penalty += 2
+
+            if exposure.exposed_count >= MAX_GLOBAL_EXPOSURE:
+                penalty += 3
+
             scored_movies.append((penalty, movie))
+
 
 
         # Sort by penalty, then shuffle inside penalty groups
@@ -794,7 +850,7 @@ class RecommendationView(APIView):
             random.shuffle(grouped[penalty])
             final_movies.extend(grouped[penalty])
 
-        movies = final_movies[:FINAL_DECK_SIZE]
+        movies = final_movies[:deck_size]
         for movie in movies:
             try:
                 exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
