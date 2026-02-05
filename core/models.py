@@ -83,7 +83,11 @@ class Movie(models.Model):
 
     rating = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    tags = models.ManyToManyField(
+    "MovieTag",
+    blank=True,
+    related_name="movies"
+    )
 
 
 
@@ -178,4 +182,14 @@ class SessionStats(models.Model):
 
     def __str__(self):
         return f"Stats for session {self.session.id}"
+
+class MovieTag(models.Model):
+    """
+    Lightweight sub-genre / vibe tags.
+    Examples: 'unhinged', 'comfort watch', 'slow burn'
+    """
+    name = models.CharField(max_length=50, unique=True)
+
+    def __str__(self):
+        return self.name
 
