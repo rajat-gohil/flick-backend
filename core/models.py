@@ -143,3 +143,43 @@ class Match(models.Model):
 
     def __str__(self):
         return f"Match: {self.movie.title} ({self.session.code})"
+    
+
+    # Data Capture #
+
+class MovieExposure(models.Model):
+    movie = models.OneToOneField(
+        Movie,
+        on_delete=models.CASCADE,
+        related_name="exposure"
+    )
+    exposed_count = models.PositiveIntegerField(default=0)
+    last_exposed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.movie.title} — {self.exposed_count}"
+
+
+class SessionStats(models.Model):
+    session = models.OneToOneField(
+        Session,
+        on_delete=models.CASCADE,
+        related_name="stats"
+    )
+    total_swipes = models.PositiveIntegerField(default=0)
+    total_matches = models.PositiveIntegerField(default=0)
+    duration_ms = models.PositiveIntegerField(null=True, blank=True)
+    ended_by = models.CharField(
+        max_length=20,
+        choices=[
+            ("user", "User"),
+            ("no_more_movies", "No More Movies"),
+            ("disconnect", "Disconnect"),
+        ],
+        null=True,
+        blank=True,
+    )
+
+    def __str__(self):
+        return f"Stats for session {self.session.id}"
+

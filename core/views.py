@@ -24,6 +24,8 @@ from .models import Movie, Swipe, Match, Session, Genre
 from .serializers import MovieSerializer, RegisterSerializer, SwipeSerializer, GenreSerializer, SessionDetailSerializer
 from .pagination import SwipeHistoryPagination
 from .models import Genre
+from .models import MovieExposure
+from .models import SessionStats
 
 # -------------------------------------------------------------------
 # Utility helpers
@@ -256,6 +258,14 @@ class SessionEndView(APIView):
 
         session.ended_at = timezone.now()
         session.save()
+        stats, _ = SessionStats.objects.get_or_create(session=session)
+
+        if session.created_at:
+            duration = timezone.now() - session.created_at
+            stats.duration_ms = int(duration.total_seconds() * 1000)
+
+        stats.ended_by = "user"
+        stats.save(update_fields=["duration_ms", "ended_by"])
 
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
@@ -337,6 +347,9 @@ class SwipeCreateView(APIView):
                 movie=movie,
                 reaction=reaction
             )
+            stats, _ = SessionStats.objects.get_or_create(session=session)
+            stats.total_swipes += 1
+            stats.save(update_fields=["total_swipes"])
             # Notify partner that a swipe happened
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
@@ -365,6 +378,10 @@ class SwipeCreateView(APIView):
             if len(set(liked_users)) == 2:
                 Match.objects.create(session=session, movie=movie)
                 match_created = True
+                stats, _ = SessionStats.objects.get_or_create(session=session)
+                stats.total_matches += 1
+                stats.save(update_fields=["total_matches"])
+
 
                 # Emit WebSocket event
                 channel_layer = get_channel_layer()
@@ -621,6 +638,11 @@ class RecommendationView(APIView):
         ).exclude(
             id__in=matched_movie_ids
         ).order_by("-rating")[:20]  # limit for swipe deck
+        for movie in movies:
+            exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
+            exposure.exposed_count += 1
+            exposure.last_exposed_at = timezone.now()
+            exposure.save(update_fields=["exposed_count", "last_exposed_at"])
 
         serializer = MovieSerializer(movies, many=True)
 
@@ -792,3 +814,4 @@ class SessionStatusView(APIView):
             },
             status=status.HTTP_200_OK
         )
+    
