@@ -642,15 +642,15 @@ class RecommendationView(APIView):
         now = timezone.now()
 
         # Base candidate pool
-        candidate_ids = (
+        candidate_ids = list(
             Movie.objects.filter(
                 genres=session.genre
             )
             .exclude(id__in=swiped_movie_ids)
             .exclude(id__in=matched_movie_ids)
             .values_list("id", flat=True)
-            .distinct()[:CANDIDATE_POOL_SIZE]
-        )
+            .distinct()
+        )[:CANDIDATE_POOL_SIZE]
 
         candidate_movies = Movie.objects.filter(id__in=candidate_ids)
 
