@@ -73,8 +73,20 @@ class SessionDetailSerializer(serializers.ModelSerializer):
     host_joined = serializers.SerializerMethodField()
     guest_joined = serializers.SerializerMethodField()
     ended = serializers.SerializerMethodField()
-    quality_score = serializers.IntegerField(source="stats.quality_score", read_only=True)
-    highlights = serializers.JSONField(source="stats.highlights", read_only=True)
+    quality_score = serializers.SerializerMethodField()
+    highlights = serializers.SerializerMethodField()
+
+    def get_quality_score(self, obj):
+        if hasattr(obj, "stats"):
+            return obj.stats.quality_score
+        return None
+
+    def get_highlights(self, obj):
+        if hasattr(obj, "stats"):
+            return obj.stats.highlights
+        return []
+
+
 
     class Meta:
         model = Session
@@ -85,6 +97,8 @@ class SessionDetailSerializer(serializers.ModelSerializer):
             "host_joined",
             "guest_joined",
             "ended",
+            "quality_score",
+            "highlights",
         ]
 
     def get_genre(self, obj):
