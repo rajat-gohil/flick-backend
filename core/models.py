@@ -13,6 +13,13 @@ class Genre(models.Model):
     """
     tmdb_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=100)
+    industry = models.CharField(
+    max_length=20,
+    choices=[
+        ("bollywood", "Bollywood"),
+        ("hollywood", "Hollywood"),
+    ]
+)
 
     def __str__(self):
         return self.name
@@ -52,6 +59,18 @@ class Session(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
+
+    INDUSTRY_CHOICES = [
+        ("bollywood", "Bollywood"),
+        ("hollywood", "Hollywood"),
+    ]
+
+    industry = models.CharField(
+        max_length=20,
+        choices=INDUSTRY_CHOICES,
+        null=True,
+        blank=True
+    )
 
     def is_active(self):
         return self.ended_at is None

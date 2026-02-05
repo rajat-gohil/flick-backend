@@ -192,7 +192,6 @@ class SessionCreateView(APIView):
 
         session = Session.objects.create(
             host=request.user,
-            genre=genre,
             code=generate_session_code()
         )
 
@@ -201,13 +200,51 @@ class SessionCreateView(APIView):
                 "success": True,
                 "session_id": session.id,
                 "code": session.code,
-                "genre": {
-                    "id": genre.id,
-                    "name": genre.name
-                }
+                "industry_selected": False
             },
             status=status.HTTP_201_CREATED
         )
+    
+
+class SessionIndustrySelectView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        session_id = request.data.get("session_id")
+        industry = request.data.get("industry")
+
+        if industry not in ["bollywood", "hollywood"]:
+            return Response(
+                {"success": False, "error": "Invalid industry"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            session = Session.objects.get(id=session_id)
+        except Session.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Session not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if request.user not in [session.host, session.guest]:
+            return Response(
+                {"success": False, "error": "Not allowed"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        session.industry = industry
+        session.save(update_fields=["industry"])
+
+        return Response(
+            {
+                "success": True,
+                "industry": industry
+            },
+            status=status.HTTP_200_OK
+        )
+
 
 class SessionJoinView(APIView):
     """
@@ -411,7 +448,7 @@ class SwipeCreateView(APIView):
                 reaction=reaction
             )
             stats, _ = SessionStats.objects.get_or_create(session=session)
-            stats.total_swipes = Swipe.objects.filter(session=session).count()
+            stats.total_swipes += 1
             stats.save(update_fields=["total_swipes"])
             # Notify partner that a swipe happened
             channel_layer = get_channel_layer()
@@ -696,9 +733,18 @@ class RecommendationView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
+    
     def get(self, request):
         session_id = request.query_params.get("session_id")
-
+        if not session.industry:
+            return Response(
+                {
+                    "success": False,
+                    "error": "Industry not selected yet"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         if not session_id:
             return Response(
                 {"success": False, "error": "session_id is required"},
@@ -712,6 +758,13 @@ class RecommendationView(APIView):
                 {"success": False, "error": "Session not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
+        
+        if not session.industry:
+            return Response(
+                {"success": False, "error": "Industry not selected"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
 
         # User must be part of session
         if request.user not in [session.host, session.guest]:
@@ -879,6 +932,9 @@ class GenreListView(APIView):
 
     def get(self, request):
         genres = Genre.objects.all().order_by('name')
+        industry = request.query_params.get("industry")
+
+        genres = Genre.objects.filter(industry=industry).order_by("name")
 
         data = [
             {'id': genre.id, 'name':genre.name}
