@@ -693,10 +693,14 @@ class RecommendationView(APIView):
 
         movies = final_movies[:FINAL_DECK_SIZE]
         for movie in movies:
-            exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
-            exposure.exposed_count += 1
-            exposure.last_exposed_at = timezone.now()
-            exposure.save(update_fields=["exposed_count", "last_exposed_at"])
+            try:
+                exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
+                exposure.exposed_count += 1
+                exposure.last_exposed_at = timezone.now()
+                exposure.save(update_fields=["exposed_count", "last_exposed_at"])
+            except Exception:
+                # Never break recommendations due to analytics
+                pass
 
         serializer = MovieSerializer(movies, many=True)
 
