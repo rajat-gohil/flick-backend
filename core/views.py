@@ -26,6 +26,7 @@ from .pagination import SwipeHistoryPagination
 from .models import Genre
 from .models import MovieExposure
 from .models import SessionStats
+from .models import UserTasteSignal
 
 # -------------------------------------------------------------------
 # Recommendation shaping constants (Phase 2)
@@ -351,6 +352,7 @@ class SwipeCreateView(APIView):
         # 5. Create swipe (unique constraint enforced at DB level)
         try:
             swipe = Swipe.objects.create(
+                
                 user=request.user,
                 session=session,
                 movie=movie,
@@ -373,6 +375,20 @@ class SwipeCreateView(APIView):
                 {"success": False, "error": "Already swiped on this movie"},
                 status=status.HTTP_409_CONFLICT
             )
+        # --- Taste signal logging (Phase 2B) ---
+        for tag in movie.tags.all():
+            signal, _ = UserTasteSignal.objects.get_or_create(
+                user=request.user,
+                tag=tag
+            )
+
+            if reaction == Swipe.LIKE:
+                signal.like_count += 1
+            else:
+                signal.dislike_count += 1
+
+            signal.save(update_fields=["like_count", "dislike_count", "last_interacted_at"])
+
 
         # 6. Match detection
         match_created = False
@@ -672,10 +688,26 @@ class RecommendationView(APIView):
 
             # Soft score (lower is worse)
             penalty = 0
+
             if recently_exposed:
                 penalty += 2
             if over_exposed:
                 penalty += 3
+
+            # --- Taste bias (Phase 2B) ---
+            taste_bonus = 0
+            for tag in movie.tags.all():
+                try:
+                    signal = UserTasteSignal.objects.get(
+                        user=request.user,
+                        tag=tag
+                    )
+                    taste_bonus += (signal.like_count - signal.dislike_count)
+                except UserTasteSignal.DoesNotExist:
+                    pass
+
+            # Cap influence so exploration survives
+            penalty -= min(taste_bonus, 3)
 
             scored_movies.append((penalty, movie))
 

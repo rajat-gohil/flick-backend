@@ -193,3 +193,14 @@ class MovieTag(models.Model):
     def __str__(self):
         return self.name
 
+class UserTasteSignal(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    tag = models.ForeignKey("MovieTag", on_delete=models.CASCADE)
+
+    like_count = models.PositiveIntegerField(default=0)
+    dislike_count = models.PositiveIntegerField(default=0)
+
+    last_interacted_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("user", "tag")
