@@ -283,6 +283,44 @@ class SessionEndView(APIView):
             stats.duration_ms = int(duration.total_seconds() * 1000)
 
         stats.ended_by = "user"
+        # --- Session Quality Score (Phase 2D) ---
+
+        swipes = stats.total_swipes
+        matches = stats.total_matches
+        duration_minutes = (stats.duration_ms or 0) / 60000
+
+        score = 0
+        highlights = []
+
+        # Match efficiency (core signal)
+        if swipes > 0:
+            match_ratio = matches / swipes
+            score += min(int(match_ratio * 100), 40)
+
+            if match_ratio > 0.2:
+                highlights.append("Strong agreement")
+            elif match_ratio < 0.05:
+                highlights.append("Low alignment")
+
+        # Absolute matches
+        score += min(matches * 15, 30)
+        if matches >= 2:
+            highlights.append("Multiple matches")
+
+        # Session depth
+        if duration_minutes > 5:
+            score += 10
+            highlights.append("Good session flow")
+
+        # Penalize dead sessions
+        if swipes < 10:
+            score -= 15
+            highlights.append("Ended too early")
+
+        # Clamp score
+        stats.quality_score = max(0, min(score, 100))
+        stats.highlights = highlights
+        stats.save(update_fields=["quality_score", "highlights"])
         stats.save(update_fields=["duration_ms", "ended_by"])
 
         channel_layer = get_channel_layer()
@@ -693,8 +731,10 @@ class RecommendationView(APIView):
         scored_movies = []
 
         for movie in candidate_movies:
+            penalty = 0
             user_a, user_b = normalize_pair(session.host, session.guest)
 
+            # --- Session chemistry bias (Phase 2C) ---
             chemistry_bonus = 0
             for tag in movie.tags.all():
                 try:
@@ -707,22 +747,18 @@ class RecommendationView(APIView):
                 except SessionChemistry.DoesNotExist:
                     pass
 
-            # Cap influence to avoid overfitting
             penalty -= min(chemistry_bonus, 4)
+
+            # --- Exposure penalties (Phase 2A) ---
             exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
 
-            # Penalize recently exposed movies
             recently_exposed = (
                 exposure.last_exposed_at and
-                (now - exposure.last_exposed_at).total_seconds() <
-                RECENT_EXPOSURE_COOLDOWN_MINUTES * 60
+                (now - exposure.last_exposed_at).total_seconds()
+                < RECENT_EXPOSURE_COOLDOWN_MINUTES * 60
             )
 
-            # Penalize globally over-exposed movies
             over_exposed = exposure.exposed_count >= MAX_GLOBAL_EXPOSURE
-
-            # Soft score (lower is worse)
-            penalty = 0
 
             if recently_exposed:
                 penalty += 2
@@ -741,10 +777,10 @@ class RecommendationView(APIView):
                 except UserTasteSignal.DoesNotExist:
                     pass
 
-            # Cap influence so exploration survives
             penalty -= min(taste_bonus, 3)
 
             scored_movies.append((penalty, movie))
+
 
         # Sort by penalty, then shuffle inside penalty groups
         scored_movies.sort(key=lambda x: x[0])

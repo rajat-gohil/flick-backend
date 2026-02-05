@@ -179,6 +179,9 @@ class SessionStats(models.Model):
         null=True,
         blank=True,
     )
+        # --- Phase 2D ---
+    quality_score = models.PositiveIntegerField(null=True, blank=True)
+    highlights = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return f"Stats for session {self.session.id}"
@@ -232,3 +235,5 @@ class SessionChemistry(models.Model):
 
     def __str__(self):
         return f"{self.user_a} + {self.user_b} → {self.tag}"
+
+

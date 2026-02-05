@@ -73,6 +73,8 @@ class SessionDetailSerializer(serializers.ModelSerializer):
     host_joined = serializers.SerializerMethodField()
     guest_joined = serializers.SerializerMethodField()
     ended = serializers.SerializerMethodField()
+    quality_score = serializers.IntegerField(source="stats.quality_score", read_only=True)
+    highlights = serializers.JSONField(source="stats.highlights", read_only=True)
 
     class Meta:
         model = Session
