@@ -28,6 +28,15 @@ from .models import MovieExposure
 from .models import SessionStats
 
 # -------------------------------------------------------------------
+# Recommendation shaping constants (Phase 2)
+# -------------------------------------------------------------------
+
+RECENT_EXPOSURE_COOLDOWN_MINUTES = 30
+MAX_GLOBAL_EXPOSURE = 50
+CANDIDATE_POOL_SIZE = 60
+FINAL_DECK_SIZE = 20
+
+# -------------------------------------------------------------------
 # Utility helpers
 # -------------------------------------------------------------------
 
