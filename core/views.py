@@ -411,7 +411,7 @@ class SwipeCreateView(APIView):
                 reaction=reaction
             )
             stats, _ = SessionStats.objects.get_or_create(session=session)
-            stats.total_swipes += 1
+            stats.total_swipes = Swipe.objects.filter(session=session).count()
             stats.save(update_fields=["total_swipes"])
             # Notify partner that a swipe happened
             channel_layer = get_channel_layer()
