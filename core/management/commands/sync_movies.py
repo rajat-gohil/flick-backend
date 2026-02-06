@@ -20,8 +20,8 @@ class Command(BaseCommand):
                     defaults={
                         "title": item["title"],
                         "overview": item.get("overview", ""),
-                        "poster_path": item.get("poster_path", ""),
-                        "backdrop_path": item.get("backdrop_path", ""),
+                        "poster_path": item.get("poster_path") or "",
+                        "backdrop_path": item.get("backdrop_path") or "",
                         "release_date": item.get("release_date") or None,
                         "rating": item.get("vote_average"),
                     }
