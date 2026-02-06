@@ -247,6 +247,12 @@ class SessionJoinView(APIView):
                 {"success": False, "error": "Session already full"},
                 status=status.HTTP_409_CONFLICT
             )
+        if session.industry is not None:
+            return Response(
+                {"error": "Industry already selected"},
+                status=400
+            )
+
 
         session.guest = request.user
         session.save()
@@ -888,21 +894,18 @@ class GenreListView(APIView):
             return Response(
                 {
                     "success": False,
-                    "error": "industry query param required (bollywood | hollywood)"
+                    "error": "industry query param required"
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        genres = Genre.objects.filter(
-            industry=industry
-        ).order_by("name")
+        genres = Genre.objects.filter(industry=industry).order_by("name")
 
         return Response(
             {
                 "success": True,
                 "genres": [
-                    {"id": g.id, "name": g.name}
-                    for g in genres
+                    {"id": g.id, "name": g.name} for g in genres
                 ]
             },
             status=status.HTTP_200_OK
