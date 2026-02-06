@@ -204,7 +204,6 @@ class SessionCreateView(APIView):
                 "genre": {
                     "id": genre.id,
                     "name": genre.name,
-                    "industry": genre.industry
                 }},
 
             status=status.HTTP_201_CREATED
@@ -760,16 +759,24 @@ class RecommendationView(APIView):
             deck_size = 10
 
         # Base candidate pool
-        candidate_ids = list(
-        Movie.objects.filter(
-            genres=session.genre,
-            genres__industry=session.genre.industry
+        base_qs = Movie.objects.filter(
+            genres=session.genre
         )
+
+        # INDUSTRY → LANGUAGE MAPPING (NON-NEGOTIABLE)
+        if session.industry == "bollywood":
+            base_qs = base_qs.filter(original_language="hi")
+        elif session.industry == "hollywood":
+            base_qs = base_qs.filter(original_language="en")
+
+        candidate_ids = list(
+            base_qs
             .exclude(id__in=swiped_movie_ids)
             .exclude(id__in=matched_movie_ids)
             .values_list("id", flat=True)
             .distinct()
         )[:CANDIDATE_POOL_SIZE]
+
 
         candidate_movies = Movie.objects.filter(id__in=candidate_ids)
 
@@ -888,18 +895,7 @@ class GenreListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        industry = request.query_params.get("industry")
-
-        if industry not in ["bollywood", "hollywood"]:
-            return Response(
-                {
-                    "success": False,
-                    "error": "industry query param required"
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        genres = Genre.objects.filter(industry=industry).order_by("name")
+        genres = Genre.objects.all().order_by("name")
 
         return Response(
             {
@@ -910,6 +906,7 @@ class GenreListView(APIView):
             },
             status=status.HTTP_200_OK
         )
+
 
     
     
