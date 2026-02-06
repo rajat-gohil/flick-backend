@@ -4,6 +4,8 @@ from datetime import timedelta
 
 from django.utils import timezone
 from django.db import IntegrityError
+from django.db import models
+
 
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -29,6 +31,7 @@ from .models import UserTasteSignal
 from .models import SessionChemistry
 from .models import MovieTagRelation
 from .models import MovieTag
+
 
 
 
@@ -673,7 +676,9 @@ class MovieSyncTMDBView(APIView):
                     "backdrop_path": item.get("backdrop_path", ""),
                     "release_date": item.get("release_date") or None,
                     "rating": item.get("vote_average"),
+                    "original_language": item.get("original_language"),
                 }
+
             )
 
             # ✅ Correct genre linking
@@ -765,9 +770,16 @@ class RecommendationView(APIView):
 
         # INDUSTRY → LANGUAGE MAPPING (NON-NEGOTIABLE)
         if session.industry == "bollywood":
-            base_qs = base_qs.filter(original_language="hi")
+            base_qs = base_qs.filter(
+                models.Q(original_language="hi") |
+                models.Q(original_language__isnull=True)
+            )
         elif session.industry == "hollywood":
-            base_qs = base_qs.filter(original_language="en")
+            base_qs = base_qs.filter(
+                models.Q(original_language="en") |
+                models.Q(original_language__isnull=True)
+            )
+
 
         candidate_ids = list(
             base_qs

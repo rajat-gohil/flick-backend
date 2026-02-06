@@ -17,7 +17,7 @@ class Genre(models.Model):
     industry = models.CharField(
     max_length=50,
     choices=[
-        ("bollywood", "Bollywood"),
+        ("bollywood", "Indian Movies"),
         ("hollywood", "Hollywood"),
     ]
 )
@@ -95,6 +95,12 @@ class Movie(models.Model):
     "MovieTag",
     blank=True,
     related_name="movies"
+    )
+    original_language = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True,
+        db_index=True
     )
 
 
