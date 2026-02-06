@@ -4,7 +4,6 @@ from datetime import timedelta
 
 from django.utils import timezone
 from django.db import IntegrityError
-from django.db.models import Count, Q
 
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -21,7 +20,7 @@ from rest_framework import status
 
 
 from .models import Movie, Swipe, Match, Session, Genre
-from .serializers import MovieSerializer, RegisterSerializer, SwipeSerializer, GenreSerializer, SessionDetailSerializer
+from .serializers import MovieSerializer, RegisterSerializer, SwipeSerializer, SessionDetailSerializer
 from .pagination import SwipeHistoryPagination
 from .models import Genre
 from .models import MovieExposure
@@ -192,59 +191,25 @@ class SessionCreateView(APIView):
 
         session = Session.objects.create(
             host=request.user,
+            genre=genre,
             code=generate_session_code()
         )
+
 
         return Response(
             {
                 "success": True,
                 "session_id": session.id,
                 "code": session.code,
-                "industry_selected": False
-            },
+                "genre": {
+                    "id": genre.id,
+                    "name": genre.name,
+                    "industry": genre.industry
+                }},
+
             status=status.HTTP_201_CREATED
         )
     
-
-class SessionIndustrySelectView(APIView):
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        session_id = request.data.get("session_id")
-        industry = request.data.get("industry")
-
-        if industry not in ["bollywood", "hollywood"]:
-            return Response(
-                {"success": False, "error": "Invalid industry"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            session = Session.objects.get(id=session_id)
-        except Session.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Session not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        if request.user not in [session.host, session.guest]:
-            return Response(
-                {"success": False, "error": "Not allowed"},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        session.industry = industry
-        session.save(update_fields=["industry"])
-
-        return Response(
-            {
-                "success": True,
-                "industry": industry
-            },
-            status=status.HTTP_200_OK
-        )
-
 
 class SessionJoinView(APIView):
     """
@@ -736,14 +701,6 @@ class RecommendationView(APIView):
     
     def get(self, request):
         session_id = request.query_params.get("session_id")
-        if not session.industry:
-            return Response(
-                {
-                    "success": False,
-                    "error": "Industry not selected yet"
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
         
         if not session_id:
             return Response(
@@ -759,13 +716,6 @@ class RecommendationView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        if not session.industry:
-            return Response(
-                {"success": False, "error": "Industry not selected"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-
         # User must be part of session
         if request.user not in [session.host, session.guest]:
             return Response(
@@ -805,9 +755,10 @@ class RecommendationView(APIView):
 
         # Base candidate pool
         candidate_ids = list(
-            Movie.objects.filter(
-                genres=session.genre
-            )
+        Movie.objects.filter(
+            genres=session.genre,
+            genres__industry=session.genre.industry
+        )
             .exclude(id__in=swiped_movie_ids)
             .exclude(id__in=matched_movie_ids)
             .values_list("id", flat=True)
@@ -929,22 +880,21 @@ class RecommendationView(APIView):
 class GenreListView(APIView):
     permission_classes = [IsAuthenticated]
     authentication_classes = [TokenAuthentication]
-
     def get(self, request):
-        genres = Genre.objects.all().order_by('name')
         industry = request.query_params.get("industry")
+
+        if industry not in ["bollywood", "hollywood"]:
+            return Response(
+                {"success": False, "error": "industry query param required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         genres = Genre.objects.filter(industry=industry).order_by("name")
 
-        data = [
-            {'id': genre.id, 'name':genre.name}
-            for genre in genres
-        ]
+        data = [{"id": g.id, "name": g.name} for g in genres]
 
-        return Response(
-            {'success': True, 'genres': data},
-            status=status.HTTP_200_OK
-        )
+        return Response({"success": True, "genres": data})
+    
     
 class SessionGenreSelectView(APIView):
     authentication_classes = [TokenAuthentication]
