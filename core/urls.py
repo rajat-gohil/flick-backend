@@ -19,9 +19,9 @@ from .views import (
     MovieSyncTMDBView,
     RecommendationView,
     GenreListView,
-    SessionGenreSelectView,
     SessionDetailView,
     SessionStatusView,
+    SessionSetGenreView,
     )
 
 urlpatterns = [
@@ -38,7 +38,6 @@ urlpatterns = [
     path('sessions/create/', SessionCreateView.as_view(), name='session-create'),
     path('sessions/join/', SessionJoinView.as_view(), name='session-join'),
     path("sessions/end/", SessionEndView.as_view(), name="session-end"),
-    path("sessions/select-genres/", SessionGenreSelectView.as_view(), name="session-select-genres"),
     path("matches/", MatchListView.as_view(), name="match-list"),
     path("swipes/undo/", SwipeUndoView.as_view(), name="swipe-undo"),
     path("swipes/history/", SwipeHistoryView.as_view(), name="swipe-history"),
@@ -46,4 +45,5 @@ urlpatterns = [
     path("genres/", GenreListView.as_view(), name="genre-list"),
     path("sessions/<int:session_id>/", SessionDetailView.as_view(), name="session-detail"),
     path("sessions/status/", SessionStatusView.as_view(), name="session-status"),
+    path("api/sessions/set-genre/", SessionSetGenreView.as_view()),
 ]

@@ -162,56 +162,68 @@ class LoginView(ObtainAuthToken):
 
 class SessionCreateView(APIView):
     """
-    Create a new session.
-    A valid genre_id is required and stored on the session.
+    Create a new session (NO genre at creation).
     """
 
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        genre_id = request.data.get("genre_id")
-
-        if not genre_id:
-            return Response(
-                {
-                    "success": False,
-                    "error": "genre_id is required"
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            genre = Genre.objects.get(id=genre_id)
-        except Genre.DoesNotExist:
-            return Response(
-                {
-                    "success": False,
-                    "error": "Invalid genre_id"
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
         session = Session.objects.create(
             host=request.user,
-            genre=genre,
             code=generate_session_code()
         )
-
 
         return Response(
             {
                 "success": True,
                 "session_id": session.id,
                 "code": session.code,
-                "genre": {
-                    "id": genre.id,
-                    "name": genre.name,
-                }},
-
+            },
             status=status.HTTP_201_CREATED
         )
     
+class SessionSetGenreView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        session_id = request.data.get("session_id")
+        genre_id = request.data.get("genre_id")
+
+        if not session_id or not genre_id:
+            return Response(
+                {"success": False, "error": "session_id and genre_id required"},
+                status=400
+            )
+
+        try:
+            session = Session.objects.get(id=session_id)
+            genre = Genre.objects.get(id=genre_id)
+        except (Session.DoesNotExist, Genre.DoesNotExist):
+            return Response(
+                {"success": False, "error": "Invalid session or genre"},
+                status=404
+            )
+
+        if request.user != session.host:
+            return Response(
+                {"success": False, "error": "Only host can set genre"},
+                status=403
+            )
+
+        session.genre = genre
+        session.save(update_fields=["genre"])
+
+        return Response(
+            {
+                "success": True,
+                "session_id": session.id,
+                "genre": {"id": genre.id, "name": genre.name}
+            },
+            status=200
+        )
+
 
 class SessionJoinView(APIView):
     """
@@ -248,11 +260,6 @@ class SessionJoinView(APIView):
             return Response(
                 {"success": False, "error": "Session already full"},
                 status=status.HTTP_409_CONFLICT
-            )
-        if session.industry is not None:
-            return Response(
-                {"error": "Industry already selected"},
-                status=400
             )
 
 
@@ -732,6 +739,12 @@ class RecommendationView(APIView):
                 {"success": False, "error": "Not part of this session"},
                 status=status.HTTP_403_FORBIDDEN
             )
+        if not session.genre:
+            return Response(
+                {"success": False, "error": "Genre not selected yet"},
+                status=400
+            )
+
 
         # Get already swiped movie IDs
         swiped_movie_ids = Swipe.objects.filter(
@@ -769,12 +782,12 @@ class RecommendationView(APIView):
         )
 
         # INDUSTRY → LANGUAGE MAPPING (NON-NEGOTIABLE)
-        if session.industry == "bollywood":
+        if session.genre.industry == "bollywood":
             base_qs = base_qs.filter(
                 models.Q(original_language="hi") |
                 models.Q(original_language__isnull=True)
             )
-        elif session.industry == "hollywood":
+        elif session.genre.industry == "hollywood":
             base_qs = base_qs.filter(
                 models.Q(original_language="en") |
                 models.Q(original_language__isnull=True)
@@ -905,9 +918,18 @@ class RecommendationView(APIView):
 class GenreListView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-        genres = Genre.objects.all().order_by("name")
+        industry = request.query_params.get("industry")
+
+        if industry not in ["bollywood", "hollywood"]:
+            return Response(
+                {"success": False, "error": "industry query param required"},
+                status=400
+            )
+
+        genres = Genre.objects.filter(
+            industry=industry
+        ).order_by("name")
 
         return Response(
             {
@@ -919,80 +941,6 @@ class GenreListView(APIView):
             status=status.HTTP_200_OK
         )
 
-
-    
-    
-class SessionGenreSelectView(APIView):
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        session_id = request.data.get("session_id")
-        genre_ids = request.data.get("genre_ids", [])
-
-        if not session_id or not genre_ids:
-            return Response(
-                {"success": False, "error": "session_id and genre_ids required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            session = Session.objects.get(id=session_id)
-        except Session.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Session not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        if request.user not in [session.host, session.guest]:
-            return Response(
-                {"success": False, "error": "Not part of this session"},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        genres = Genre.objects.filter(id__in=genre_ids)
-
-        # Save selection based on role
-        if request.user == session.host:
-            session.host_selected_genres.set(genres)
-        else:
-            session.guest_selected_genres.set(genres)
-
-        # Check if both users have selected
-        if session.host_selected_genres.exists() and session.guest_selected_genres.exists():
-            agreed_genres = session.host_selected_genres.filter(
-                id__in=session.guest_selected_genres.values_list("id", flat=True)
-            )
-
-            if not agreed_genres.exists():
-                return Response(
-                    {
-                        "success": False,
-                        "error": "No common genres. Please reselect."
-                    },
-                    status=status.HTTP_409_CONFLICT
-                )
-
-            session.selected_genres.set(agreed_genres)
-
-            return Response(
-                {
-                    "success": True,
-                    "agreed": True,
-                    "message": "Genres matched",
-                    "genres": list(agreed_genres.values("id", "name"))
-                },
-                status=status.HTTP_200_OK
-            )
-
-        return Response(
-            {
-                "success": True,
-                "agreed": False,
-                "message": "Waiting for other user to select genres"
-            },
-            status=status.HTTP_200_OK
-        )
     
 class SessionDetailView(APIView):
     """
