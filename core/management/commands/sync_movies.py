@@ -11,7 +11,7 @@ class Command(BaseCommand):
         movies_created = 0
 
         # Fetch multiple pages for a larger pool
-        for page in range(1, 999):  # pages 1–5
+        for page in range(1, 499):  # pages 1–5
             tmdb_data = get_popular_movies(page=page)
 
             for item in tmdb_data.get("results", []):

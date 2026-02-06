@@ -878,22 +878,36 @@ class RecommendationView(APIView):
         )
 
 class GenreListView(APIView):
-    permission_classes = [IsAuthenticated]
     authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         industry = request.query_params.get("industry")
 
         if industry not in ["bollywood", "hollywood"]:
             return Response(
-                {"success": False, "error": "industry query param required"},
+                {
+                    "success": False,
+                    "error": "industry query param required (bollywood | hollywood)"
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        genres = Genre.objects.filter(industry=industry).order_by("name")
+        genres = Genre.objects.filter(
+            industry=industry
+        ).order_by("name")
 
-        data = [{"id": g.id, "name": g.name} for g in genres]
+        return Response(
+            {
+                "success": True,
+                "genres": [
+                    {"id": g.id, "name": g.name}
+                    for g in genres
+                ]
+            },
+            status=status.HTTP_200_OK
+        )
 
-        return Response({"success": True, "genres": data})
     
     
 class SessionGenreSelectView(APIView):
