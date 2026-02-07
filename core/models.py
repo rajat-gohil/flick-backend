@@ -77,7 +77,8 @@ class Session(models.Model):
         return self.ended_at is None
 
     def __str__(self):
-        return f"Session {self.code} ({self.genre.name})"
+        return f"Session {self.code} ({self.genre.name if self.genre else 'No genre'})"
+
 
 
 # -------------------------------------------------
