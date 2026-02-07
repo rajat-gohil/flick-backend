@@ -32,8 +32,12 @@ class Command(BaseCommand):
         for item in data.get("genres", []):
             _, was_created = Genre.objects.update_or_create(
                 tmdb_id=item["id"],
-                defaults={"name": item["name"]},
+                defaults={
+                    "name": item["name"],
+                    "industry": "hollywood",  # REQUIRED
+                },
             )
+
             if was_created:
                 created += 1
 
