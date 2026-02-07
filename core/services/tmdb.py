@@ -47,3 +47,18 @@ def get_movie_genres(tmdb_id):
         response.raise_for_status()
 
     return [g["id"] for g in response.json().get("genres", [])]
+
+def get_tmdb_genres():
+    import requests
+    from django.conf import settings
+
+    url = "https://api.themoviedb.org/3/genre/movie/list"
+    params = {
+        "api_key": settings.TMDB_API_KEY,
+        "language": "en-US"
+    }
+
+    res = requests.get(url, params=params)
+    res.raise_for_status()
+    return res.json().get("genres", [])
+

@@ -1009,3 +1009,34 @@ class SessionStatusView(APIView):
             status=status.HTTP_200_OK
         )
     
+class GenreSyncTMDBView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        from .services.tmdb import get_tmdb_genres
+
+        created = 0
+        updated = 0
+
+        tmdb_genres = get_tmdb_genres()
+
+        for g in tmdb_genres:
+            genre, was_created = Genre.objects.update_or_create(
+                tmdb_id=g["id"],
+                defaults={
+                    "name": g["name"],
+                    # TEMP default – you will refine later
+                    "industry": "hollywood",
+                }
+            )
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+
+        return Response({
+            "success": True,
+            "created": created,
+            "updated": updated,
+        })
