@@ -24,6 +24,7 @@ class Command(BaseCommand):
                         "backdrop_path": item.get("backdrop_path") or "",
                         "release_date": item.get("release_date") or None,
                         "rating": item.get("vote_average"),
+                        "original_language": item.get("original_language"),
                     }
                 )
 

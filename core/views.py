@@ -45,7 +45,7 @@ CANDIDATE_POOL_SIZE = 120
 FINAL_DECK_SIZE = 40
 MIN_DECK_SIZE = 16
 MAX_DECK_SIZE = 50
-
+INDIAN_LANGUAGES = ["hi", "ta", "te", "bn", "mr", "gu", "kn", "ml", "pa"]
 
 # -------------------------------------------------------------------
 # Utility helpers
@@ -186,10 +186,11 @@ class SessionSetGenreView(APIView):
     def post(self, request):
         session_id = request.data.get("session_id")
         genre_id = request.data.get("genre_id")
+        industry = request.data.get("industry")  # ADD THIS
 
-        if not session_id or not genre_id:
+        if not session_id or not genre_id or not industry:  # UPDATE: check industry
             return Response(
-                {"success": False, "error": "session_id and genre_id required"},
+                {"success": False, "error": "session_id, genre_id, and industry required"},
                 status=400
             )
 
@@ -208,20 +209,20 @@ class SessionSetGenreView(APIView):
                 status=403
             )
 
-            session.genre = genre
-            session.industry = genre.industry
-            session.save(update_fields=["genre", "industry"])
-
+        # UPDATE: Set both genre AND industry
+        session.genre = genre
+        session.industry = industry  # ADD THIS
+        session.save(update_fields=["genre", "industry"])  # UPDATE fields
 
         return Response(
             {
                 "success": True,
                 "session_id": session.id,
-                "genre": {"id": genre.id, "name": genre.name}
+                "genre": {"id": genre.id, "name": genre.name},
+                "industry": industry  # ADD THIS
             },
             status=200
         )
-
 
 class SessionJoinView(APIView):
     """
@@ -780,12 +781,12 @@ class RecommendationView(APIView):
         )
 
         # INDUSTRY → LANGUAGE MAPPING (NON-NEGOTIABLE)
-        if session.genre.industry == "bollywood":
+        if session.industry == "bollywood": 
             base_qs = base_qs.filter(
-                models.Q(original_language="hi") |
+                models.Q(original_language__in=INDIAN_LANGUAGES) |
                 models.Q(original_language__isnull=True)
             )
-        elif session.genre.industry == "hollywood":
+        elif session.industry == "hollywood":
             base_qs = base_qs.filter(
                 models.Q(original_language="en") |
                 models.Q(original_language__isnull=True)
@@ -916,16 +917,17 @@ class RecommendationView(APIView):
 class GenreListView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
+    
     def get(self, request):
         industry = request.query_params.get("industry")
 
         if industry not in ["bollywood", "hollywood"]:
             return Response(
-                {"success": False, "error": "industry query param required"},
+                {"success": False, "error": "Valid industry required: 'bollywood' or 'hollywood'"},
                 status=400
             )
 
-        genres = Genre.objects.all().order_by("name")
+        genres = Genre.objects.filter(industry=industry).order_by("name")  # ADDED FILTER
 
         return Response(
             {
