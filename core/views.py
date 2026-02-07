@@ -667,7 +667,6 @@ class MovieSyncTMDBView(APIView):
 
     def post(self, request):
         from .services.tmdb import get_popular_movies
-        from .models import Genre
 
         movies_created = 0
         tmdb_data = get_popular_movies(page=1)
@@ -915,8 +914,8 @@ class RecommendationView(APIView):
         )
 
 class GenreListView(APIView):
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = []
+    permission_classes = []
     
     def get(self, request):
         industry = request.query_params.get("industry")
