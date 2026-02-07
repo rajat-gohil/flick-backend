@@ -169,19 +169,33 @@ class SessionCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        industry = request.data.get("industry")
+        genre_id = request.data.get("genre_id")
+
+        if not industry or not genre_id:
+            return Response(
+                {"error": "industry and genre_id required"},
+                status=400
+            )
+
+        try:
+            genre = Genre.objects.get(id=genre_id)
+        except Genre.DoesNotExist:
+            return Response({"error": "Invalid genre"}, status=404)
+
         session = Session.objects.create(
             host=request.user,
+            industry=industry,
+            genre=genre,
             code=generate_session_code()
         )
 
-        return Response(
-            {
-                "success": True,
-                "session_id": session.id,
-                "code": session.code,
-            },
-            status=status.HTTP_201_CREATED
-        )
+        return Response({
+            "success": True,
+            "session_id": session.id,
+            "code": session.code,
+        }, status=201)
+
     
 class SessionSetGenreView(APIView):
     authentication_classes = [TokenAuthentication]

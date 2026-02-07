@@ -59,6 +59,15 @@ class Session(models.Model):
         null=True,
         blank=True,
     )
+    industry = models.CharField(
+        max_length=20,
+        choices=[
+            ("bollywood", "Indian Movies"),
+            ("hollywood", "Hollywood"),
+        ],
+        null=True,
+        blank=True,
+    )
 
 
     created_at = models.DateTimeField(auto_now_add=True)
