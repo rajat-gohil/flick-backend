@@ -927,9 +927,7 @@ class GenreListView(APIView):
                 status=400
             )
 
-        genres = Genre.objects.filter(
-            industry=industry
-        ).order_by("name")
+        genres = Genre.objects.all().order_by("name")
 
         return Response(
             {
