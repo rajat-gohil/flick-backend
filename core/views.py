@@ -916,26 +916,31 @@ class RecommendationView(APIView):
 class GenreListView(APIView):
     authentication_classes = []
     permission_classes = []
-    
+
     def get(self, request):
         industry = request.query_params.get("industry")
 
         if industry not in ["bollywood", "hollywood"]:
             return Response(
-                {"success": False, "error": "Valid industry required: 'bollywood' or 'hollywood'"},
+                {"success": False, "error": "Valid industry required"},
                 status=400
             )
 
-        genres = Genre.objects.filter(industry=industry).order_by("name")  # ADDED FILTER
+        if industry == "bollywood":
+            languages = ["hi", "ta", "te", "bn", "mr", "gu", "kn", "ml", "pa"]
+        else:
+            languages = ["en"]
+
+        genres = Genre.objects.filter(
+            movie__original_language__in=languages
+        ).distinct().order_by("name")
 
         return Response(
             {
                 "success": True,
-                "genres": [
-                    {"id": g.id, "name": g.name} for g in genres
-                ]
+                "genres": [{"id": g.id, "name": g.name} for g in genres]
             },
-            status=status.HTTP_200_OK
+            status=200
         )
 
     
