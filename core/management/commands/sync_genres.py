@@ -34,7 +34,6 @@ class Command(BaseCommand):
                 tmdb_id=item["id"],
                 defaults={
                     "name": item["name"],
-                    "industry": "hollywood",  # REQUIRED
                 },
             )
 
