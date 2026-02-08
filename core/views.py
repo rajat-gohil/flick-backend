@@ -161,11 +161,12 @@ class LoginView(ObtainAuthToken):
 # -------------------------------------------------------------------
 
 class SessionCreateView(APIView):
-    permission_classes = [AllowAny]
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         session = Session.objects.create(
-            host=request.user if request.user.is_authenticated else None,
+            host=request.user,
             code=generate_session_code()
         )
 
@@ -203,11 +204,12 @@ class SessionSetGenreView(APIView):
                 status=404
             )
 
-        if request.user != session.host:
+        if not session.host or request.user.id != session.host.id:
             return Response(
                 {"success": False, "error": "Only host can set genre"},
                 status=403
             )
+
 
         # UPDATE: Set both genre AND industry
         session.genre = genre
