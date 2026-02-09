@@ -86,8 +86,6 @@ class SessionDetailSerializer(serializers.ModelSerializer):
             return obj.stats.highlights
         return []
 
-
-
     class Meta:
         model = Session
         fields = [
@@ -97,6 +95,7 @@ class SessionDetailSerializer(serializers.ModelSerializer):
             "host_joined",
             "guest_joined",
             "ended",
+            "preferences_set",  # ✅ ADD THIS
             "quality_score",
             "highlights",
         ]

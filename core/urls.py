@@ -23,6 +23,7 @@ from .views import (
     SessionStatusView,
     SessionSetGenreView,
     GenreSyncTMDBView,
+    SessionSetPreferencesView,
     )
 
 urlpatterns = [
@@ -48,5 +49,6 @@ urlpatterns = [
     path("sessions/status/", SessionStatusView.as_view(), name="session-status"),
     path("sessions/genre/", SessionSetGenreView.as_view(), name="session-genre"),
     path("genres/sync-tmdb/", GenreSyncTMDBView.as_view()),
+    path('sessions/preferences/', SessionSetPreferencesView.as_view()),
 
 ]

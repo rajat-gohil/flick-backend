@@ -60,7 +60,6 @@ class Session(models.Model):
         blank=True,
     )
 
-    # ✅ ADD THIS FIELD
     industry = models.CharField(
         max_length=20,
         choices=[
@@ -69,6 +68,23 @@ class Session(models.Model):
         ],
         null=True,  # ← CRITICAL: Must be nullable for existing sessions
         blank=True
+    )
+    
+    host_preferences = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Host's mood/vibe preferences"
+    )
+    
+    guest_preferences = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Guest's mood/vibe preferences"
+    )
+    
+    preferences_set = models.BooleanField(
+        default=False,
+        help_text="Whether both users completed the questionnaire"
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

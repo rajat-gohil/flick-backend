@@ -230,6 +230,58 @@ class SessionSetGenreView(APIView):
             },
             status=200
         )
+    
+class SessionSetPreferencesView(APIView):
+    """
+    Store user's mood/vibe preferences for the session.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        session_id = request.data.get("session_id")
+        preferences = request.data.get("preferences")
+
+        if not session_id or not preferences:
+            return Response(
+                {"success": False, "error": "session_id and preferences required"},
+                status=400
+            )
+
+        try:
+            session = Session.objects.get(id=session_id)
+        except Session.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Session not found"},
+                status=404
+            )
+
+        # Check if user is part of session
+        if request.user not in [session.host, session.guest]:
+            return Response(
+                {"success": False, "error": "Not part of this session"},
+                status=403
+            )
+
+        # Store preferences based on user role
+        if request.user == session.host:
+            session.host_preferences = preferences
+        else:
+            session.guest_preferences = preferences
+
+        # Check if both users submitted
+        if session.host_preferences and session.guest_preferences:
+            session.preferences_set = True
+
+        session.save()
+
+        return Response(
+            {
+                "success": True,
+                "both_ready": session.preferences_set,
+            },
+            status=200
+        )
 
 class SessionJoinView(APIView):
     """
