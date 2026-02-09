@@ -777,19 +777,15 @@ class RecommendationView(APIView):
             genres=session.genre
         )
 
-        # LANGUAGE FILTERING BASED ON GENRE + MOVIE LANGUAGE
-        # Bollywood = Indian languages, Hollywood = English
-        if session.genre.industry == "bollywood":
+        # INDUSTRY → LANGUAGE MAPPING (NON-NEGOTIABLE)
+        if session.industry == "bollywood":
             base_qs = base_qs.filter(
-                models.Q(original_language__in=INDIAN_LANGUAGES) |
-                models.Q(original_language__isnull=True)
+                original_language__in=INDIAN_LANGUAGES
             )
-        elif session.genre.industry == "hollywood":
+        elif session.industry == "hollywood":
             base_qs = base_qs.filter(
-                models.Q(original_language="en") |
-                models.Q(original_language__isnull=True)
+                original_language="en"
             )
-
 
 
         candidate_ids = list(
