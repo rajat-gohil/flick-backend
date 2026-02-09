@@ -34,8 +34,10 @@ class Command(BaseCommand):
                 tmdb_id=item["id"],
                 defaults={
                     "name": item["name"],
+                    "industry": "hollywood"  # TMDB genres are global → classify as hollywood
                 },
             )
+
 
             if was_created:
                 created += 1
