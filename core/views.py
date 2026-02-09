@@ -187,10 +187,18 @@ class SessionSetGenreView(APIView):
     def post(self, request):
         session_id = request.data.get("session_id")
         genre_id = request.data.get("genre_id")
+        industry = request.data.get("industry")  # ✅ ADD THIS
 
-        if not session_id or not genre_id:
+        if not session_id or not genre_id or not industry:  # ✅ ADD industry check
             return Response(
-                {"success": False, "error": "session_id and genre_id required"},
+                {"success": False, "error": "session_id, genre_id, and industry required"},
+                status=400
+            )
+
+        # ✅ Validate industry
+        if industry not in ["bollywood", "hollywood"]:
+            return Response(
+                {"success": False, "error": "Invalid industry"},
                 status=400
             )
 
@@ -210,17 +218,18 @@ class SessionSetGenreView(APIView):
             )
 
         session.genre = genre
-        session.save(update_fields=["genre"])
+        session.industry = industry  # ✅ ADD THIS
+        session.save(update_fields=["genre", "industry"])  # ✅ UPDATE THIS
 
         return Response(
             {
                 "success": True,
                 "session_id": session.id,
                 "genre": {"id": genre.id, "name": genre.name},
+                "industry": industry,  # ✅ ADD THIS
             },
             status=200
         )
-
 
 class SessionJoinView(APIView):
     """

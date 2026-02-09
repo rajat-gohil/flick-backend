@@ -60,6 +60,16 @@ class Session(models.Model):
         blank=True,
     )
 
+    # ✅ ADD THIS FIELD
+    industry = models.CharField(
+        max_length=20,
+        choices=[
+            ("bollywood", "Bollywood"),
+            ("hollywood", "Hollywood"),
+        ],
+        null=True,  # ← CRITICAL: Must be nullable for existing sessions
+        blank=True
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
@@ -69,7 +79,6 @@ class Session(models.Model):
 
     def __str__(self):
         return f"Session {self.code} ({self.genre.name if self.genre else 'No genre'})"
-
 
 
 # -------------------------------------------------
