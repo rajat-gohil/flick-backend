@@ -56,3 +56,5 @@ urlpatterns = [
     path('users/update-username/', UpdateUsernameView.as_view()),
 
 ]
+
+#test#
