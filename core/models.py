@@ -15,12 +15,16 @@ class Genre(models.Model):
     name = models.CharField(max_length=100)
 
     industry = models.CharField(
-    max_length=50,
-    choices=[
-        ("bollywood", "Indian Movies"),
-        ("hollywood", "Hollywood"),
-    ]
-)
+            max_length=50,
+            choices=[
+                ("bollywood", "Bollywood"),
+                ("hollywood", "Hollywood"),
+                ("mixed", "Mixed"),
+            ],
+            null=True,
+            blank=True
+        )
+
 
     def __str__(self):
         return self.name
@@ -61,13 +65,20 @@ class Session(models.Model):
     )
 
     industry = models.CharField(
-        max_length=20,
+        max_length=50,
         choices=[
             ("bollywood", "Bollywood"),
             ("hollywood", "Hollywood"),
+            ("mixed", "Mixed"),
         ],
         null=True,  # ← CRITICAL: Must be nullable for existing sessions
         blank=True
+    )
+
+    selected_languages = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="User-selected languages like ['hi', 'gu', 'mr']"
     )
     
     host_preferences = models.JSONField(

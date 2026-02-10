@@ -66,41 +66,39 @@ def normalize_pair(user1, user2):
 def calculate_preference_score(movie, preferences):
     """
     Calculate how well a movie matches user preferences.
-    Uses keyword matching AND release year filtering.
+    STRICT filtering with proper era handling.
     """
     score = 0
     overview_lower = movie.overview.lower()
     title_lower = movie.title.lower()
     
-    # Mood keywords (EXPANDED)
+    # Mood keywords
     mood_keywords = {
-        "happy": ["comedy", "fun", "laugh", "joy", "light", "cheerful", "humorous", "hilarious", "amusing"],
-        "intense": ["thriller", "suspense", "intense", "dark", "serious", "gripping", "tense", "dramatic"],
-        "emotional": ["drama", "emotional", "moving", "heartfelt", "touching", "tear", "powerful", "profound"],
-        "exciting": ["action", "adventure", "exciting", "fast-paced", "thrilling", "explosive", "dynamic"],
+        "happy": ["comedy", "fun", "laugh", "joy", "light", "cheerful", "humorous", "hilarious", "amusing", "witty"],
+        "intense": ["thriller", "suspense", "intense", "dark", "serious", "gripping", "tense", "dramatic", "noir"],
+        "emotional": ["drama", "emotional", "moving", "heartfelt", "touching", "tear", "powerful", "profound", "poignant"],
+        "exciting": ["action", "adventure", "exciting", "fast-paced", "thrilling", "explosive", "dynamic", "spectacular"],
     }
     
-    # Pace keywords (EXPANDED)
     pace_keywords = {
-        "fast": ["action", "fast", "intense", "quick", "thrilling", "explosive", "adrenaline", "rush"],
-        "slow": ["slow", "deliberate", "thoughtful", "contemplative", "meditative", "quiet", "introspective"],
-        "balanced": ["balanced", "mix", "variety", "blend", "diverse"],
+        "fast": ["action", "fast", "intense", "quick", "thrilling", "explosive", "adrenaline", "rush", "rapid"],
+        "slow": ["slow", "deliberate", "thoughtful", "contemplative", "meditative", "quiet", "introspective", "patient"],
+        "balanced": ["balanced", "mix", "variety", "blend", "diverse", "moderate"],
     }
     
-    # Vibe keywords (EXPANDED)
     vibe_keywords = {
-        "feel-good": ["uplifting", "inspiring", "heartwarming", "positive", "hopeful", "optimistic", "joyful"],
-        "mind-bending": ["twist", "complex", "mystery", "puzzle", "psychological", "surreal", "enigmatic"],
-        "escapist": ["fantasy", "adventure", "magical", "world", "epic", "mythical", "otherworldly"],
-        "realistic": ["real", "authentic", "true", "based on", "documentary", "life", "actual"],
+        "feel-good": ["uplifting", "inspiring", "heartwarming", "positive", "hopeful", "optimistic", "joyful", "warm"],
+        "mind-bending": ["twist", "complex", "mystery", "puzzle", "psychological", "surreal", "enigmatic", "cryptic"],
+        "escapist": ["fantasy", "adventure", "magical", "world", "epic", "mythical", "otherworldly", "imaginative"],
+        "realistic": ["real", "authentic", "true", "based on", "documentary", "life", "actual", "gritty"],
     }
     
-    # Check moods (search in BOTH overview AND title)
+    # Check moods
     for mood in preferences.get("mood", []):
         keywords = mood_keywords.get(mood, [])
         for keyword in keywords:
             if keyword in overview_lower or keyword in title_lower:
-                score += 5  # ✅ INCREASED from 3
+                score += 8  # ✅ INCREASED
                 break
     
     # Check pace
@@ -108,7 +106,7 @@ def calculate_preference_score(movie, preferences):
         keywords = pace_keywords.get(pace, [])
         for keyword in keywords:
             if keyword in overview_lower:
-                score += 4  # ✅ INCREASED from 2
+                score += 6  # ✅ INCREASED
                 break
     
     # Check vibe
@@ -116,24 +114,34 @@ def calculate_preference_score(movie, preferences):
         keywords = vibe_keywords.get(vibe, [])
         for keyword in keywords:
             if keyword in overview_lower:
-                score += 4  # ✅ INCREASED from 2
+                score += 6  # ✅ INCREASED
                 break
     
-    # ✅ NEW: Era/Decade filtering
+    # ✅ FIX: Strict era filtering with proper logic
+    era_match = False
     if movie.release_date:
         release_year = movie.release_date.year
         
         for era in preferences.get("era", []):
             if era == "classic" and release_year < 2000:
-                score += 6
+                score += 15  # ✅ HUGE bonus for era match
+                era_match = True
             elif era == "2000s" and 2000 <= release_year < 2010:
-                score += 6
+                score += 15
+                era_match = True
             elif era == "2010s" and 2010 <= release_year < 2020:
-                score += 6
+                score += 15
+                era_match = True
             elif era == "recent" and release_year >= 2020:
-                score += 6
+                score += 15
+                era_match = True
             elif era == "any":
-                score += 2  # Small bonus for flexibility
+                score += 5  # Small bonus for flexibility
+                era_match = True
+    
+    # ✅ CRITICAL: Penalize movies that don't match era preference
+    if not era_match and preferences.get("era") and "any" not in preferences.get("era", []):
+        score -= 20  # Heavy penalty for wrong era
     
     return score
 
@@ -260,18 +268,25 @@ class SessionSetGenreView(APIView):
     def post(self, request):
         session_id = request.data.get("session_id")
         genre_id = request.data.get("genre_id")
-        industry = request.data.get("industry")  # ✅ ADD THIS
+        industry = request.data.get("industry")
+        languages = request.data.get("languages")  # ✅ ADD THIS
 
-        if not session_id or not genre_id or not industry:  # ✅ ADD industry check
+        if not session_id or not genre_id or not industry:
             return Response(
                 {"success": False, "error": "session_id, genre_id, and industry required"},
                 status=400
             )
 
-        # ✅ Validate industry
-        if industry not in ["bollywood", "hollywood"]:
+        if industry not in ["bollywood", "hollywood", "mixed"]:  # ✅ ADD mixed
             return Response(
                 {"success": False, "error": "Invalid industry"},
+                status=400
+            )
+
+        # ✅ Validate languages
+        if not languages or not isinstance(languages, list):
+            return Response(
+                {"success": False, "error": "languages must be a non-empty list"},
                 status=400
             )
 
@@ -291,15 +306,17 @@ class SessionSetGenreView(APIView):
             )
 
         session.genre = genre
-        session.industry = industry  # ✅ ADD THIS
-        session.save(update_fields=["genre", "industry"])  # ✅ UPDATE THIS
+        session.industry = industry
+        session.selected_languages = languages  # ✅ ADD THIS
+        session.save(update_fields=["genre", "industry", "selected_languages"])
 
         return Response(
             {
                 "success": True,
                 "session_id": session.id,
                 "genre": {"id": genre.id, "name": genre.name},
-                "industry": industry,  # ✅ ADD THIS
+                "industry": industry,
+                "languages": languages,  # ✅ ADD THIS
             },
             status=200
         )
@@ -858,7 +875,7 @@ class RecommendationView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):  # ✅ FIX: Proper indentation
+    def get(self, request):
         session_id = request.query_params.get("session_id")
         
         if not session_id:
@@ -888,146 +905,133 @@ class RecommendationView(APIView):
             )
 
         # Get already swiped/matched movies
-        swiped_movie_ids = Swipe.objects.filter(
+        swiped_movie_ids = list(Swipe.objects.filter(
             session=session
-        ).values_list("movie_id", flat=True)
+        ).values_list("movie_id", flat=True))
 
-        matched_movie_ids = Match.objects.filter(
+        matched_movie_ids = list(Match.objects.filter(
             session=session
-        ).values_list("movie_id", flat=True)
+        ).values_list("movie_id", flat=True))
 
-        now = timezone.now()
-        stats, _ = SessionStats.objects.get_or_create(session=session)
-
-        swipes = stats.total_swipes
-        matches = stats.total_matches
-
-        # Adaptive deck sizing
-        deck_size = FINAL_DECK_SIZE
-
-        if swipes < 10:
-            deck_size = MAX_DECK_SIZE  # 50 movies early on
-        elif matches >= 2:
-            deck_size = MIN_DECK_SIZE  # 16 movies if matching well
-        elif swipes > 15 and matches == 0:  # ✅ CHANGED from 25
-            # No matches after 15 swipes? Reduce variety, increase similarity
-            deck_size = 20  # ✅ CHANGED from 10
-
-        # Base candidate pool
+        # ✅ STEP 1: Start with ALL movies in genre
         base_qs = Movie.objects.filter(genres=session.genre)
 
-        # Industry filtering
-        if session.industry == "bollywood":
-            base_qs = base_qs.filter(original_language__in=INDIAN_LANGUAGES)
-        elif session.industry == "hollywood":
-            base_qs = base_qs.filter(original_language="en")
+        # ✅ STEP 2: Apply STRICT language filtering
+        if session.selected_languages:
+            base_qs = base_qs.filter(original_language__in=session.selected_languages)
+        else:
+            # Fallback to industry if no languages set
+            if session.industry == "bollywood":
+                base_qs = base_qs.filter(original_language__in=INDIAN_LANGUAGES)
+            elif session.industry == "hollywood":
+                base_qs = base_qs.filter(original_language="en")
+            # mixed = no language filter
 
-        candidate_ids = list(
+        # ✅ STEP 3: Get ALL candidates (not limited to 120 anymore)
+        all_candidate_ids = list(
             base_qs
             .exclude(id__in=swiped_movie_ids)
             .exclude(id__in=matched_movie_ids)
             .values_list("id", flat=True)
             .distinct()
-        )[:CANDIDATE_POOL_SIZE]
+        )
 
-        candidate_movies = Movie.objects.filter(id__in=candidate_ids)
+        # ✅ CHECK: If no movies left, return empty
+        if not all_candidate_ids:
+            return Response(
+                {
+                    "success": True,
+                    "session_id": session.id,
+                    "genre": session.genre.name,
+                    "movies": [],
+                    "exhausted": True,  # ✅ NEW FLAG
+                    "total_swiped": len(swiped_movie_ids),
+                    "total_matched": len(matched_movie_ids),
+                },
+                status=status.HTTP_200_OK
+            )
 
-        # ✅ NEW: Extract combined preferences
+        candidate_movies = Movie.objects.filter(id__in=all_candidate_ids)
+
+        # ✅ STEP 4: Extract combined preferences
         combined_prefs = {}
         if session.host_preferences and session.guest_preferences:
             host_prefs = session.host_preferences
             guest_prefs = session.guest_preferences
             
-            # Merge preferences (find common ground)
+            # Find intersection (common ground)
             combined_prefs = {
                 "mood": list(set(host_prefs.get("mood", [])) & set(guest_prefs.get("mood", []))),
                 "pace": list(set(host_prefs.get("pace", [])) & set(guest_prefs.get("pace", []))),
                 "vibe": list(set(host_prefs.get("vibe", [])) & set(guest_prefs.get("vibe", []))),
+                "era": list(set(host_prefs.get("era", [])) & set(guest_prefs.get("era", []))),
             }
             
-            # If no overlap, use union instead
-            if not combined_prefs["mood"]:
-                combined_prefs["mood"] = list(set(host_prefs.get("mood", [])) | set(guest_prefs.get("mood", [])))
-            if not combined_prefs["pace"]:
-                combined_prefs["pace"] = list(set(host_prefs.get("pace", [])) | set(guest_prefs.get("pace", [])))
-            if not combined_prefs["vibe"]:
-                combined_prefs["vibe"] = list(set(host_prefs.get("vibe", [])) | set(guest_prefs.get("vibe", [])))
+            # If no overlap, use union
+            for key in ["mood", "pace", "vibe", "era"]:
+                if not combined_prefs[key]:
+                    combined_prefs[key] = list(set(host_prefs.get(key, [])) | set(guest_prefs.get(key, [])))
 
+        # ✅ STEP 5: Score ALL movies
         scored_movies = []
 
         for movie in candidate_movies:
-            penalty = 0
+            score = 0
             
-            # ✅ NEW: Preference-based boosting
+            # Preference matching (main signal)
             if combined_prefs:
-                boost = calculate_preference_score(movie, combined_prefs)
-                penalty -= boost  # Negative penalty = higher priority
-
-            if boost < 3:  # Minimum threshold
-                continue  # Skip this movie entirely
-
-            penalty -= boost
-
-            # Existing taste bonus logic
-            taste_bonus = 0
+                pref_score = calculate_preference_score(movie, combined_prefs)
+                
+                # ✅ STRICT FILTER: Skip movies with score < 10
+                if pref_score < 10:
+                    continue
+                
+                score += pref_score
+            
+            # Taste signal (user history)
             for tag in movie.tags.all():
                 try:
                     signal = UserTasteSignal.objects.get(user=request.user, tag=tag)
-                    taste_bonus += (signal.like_count - signal.dislike_count)
+                    score += (signal.like_count - signal.dislike_count) * 2
                 except UserTasteSignal.DoesNotExist:
                     pass
-            penalty -= min(taste_bonus, 3)
-
-            # Graph bonus logic
-            graph_bonus = 0
+            
+            # Chemistry signal (pair history)
             user_a, user_b = normalize_pair(session.host, session.guest)
             for tag in movie.tags.all():
                 try:
                     chem = SessionChemistry.objects.get(
                         user_a=user_a, user_b=user_b, tag=tag.name
                     )
-                    graph_bonus += chem.match_count * 2
+                    score += chem.match_count * 3
                 except SessionChemistry.DoesNotExist:
                     pass
 
-                for rel in tag.outgoing_relations.all():
-                    try:
-                        neighbor = SessionChemistry.objects.get(
-                            user_a=user_a, user_b=user_b, tag=rel.to_tag.name
-                        )
-                        graph_bonus += rel.weight * neighbor.match_count
-                    except SessionChemistry.DoesNotExist:
-                        pass
-            penalty -= min(graph_bonus, 5)
+            # Penalize overexposed movies
+            try:
+                exposure = MovieExposure.objects.get(movie=movie)
+                if exposure.exposed_count > 50:
+                    score -= 5
+            except MovieExposure.DoesNotExist:
+                pass
 
-            # Exposure penalties
-            exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
-            recently_exposed = (
-                exposure.last_exposed_at and
-                (now - exposure.last_exposed_at).total_seconds() < 
-                RECENT_EXPOSURE_COOLDOWN_MINUTES * 60  # ✅ FIX: Added < operator
-            )
+            scored_movies.append((score, movie))
 
-            if recently_exposed:
-                penalty += 2
-            if exposure.exposed_count >= MAX_GLOBAL_EXPOSURE:
-                penalty += 3
+        # ✅ STEP 6: Sort by score (best first)
+        scored_movies.sort(key=lambda x: x[0], reverse=True)
 
-            scored_movies.append((penalty, movie))
-
-        # Sort and shuffle within penalty groups
-        scored_movies.sort(key=lambda x: x[0])
-        grouped = {}
-        for penalty, movie in scored_movies:
-            grouped.setdefault(penalty, []).append(movie)
-
-        final_movies = []
-        for penalty in sorted(grouped.keys()):
-            random.shuffle(grouped[penalty])
-            final_movies.extend(grouped[penalty])
-
-        movies = final_movies[:deck_size]
+        # ✅ STEP 7: Return top 30 movies (adaptive batch)
+        stats, _ = SessionStats.objects.get_or_create(session=session)
         
+        if stats.total_swipes < 10:
+            batch_size = 40  # Larger batch early
+        elif stats.total_matches >= 3:
+            batch_size = 20  # Smaller batch if matching well
+        else:
+            batch_size = 30  # Default
+
+        movies = [m for (score, m) in scored_movies[:batch_size]]
+
         # Update exposure
         for movie in movies:
             try:
@@ -1045,7 +1049,9 @@ class RecommendationView(APIView):
                 "success": True,
                 "session_id": session.id,
                 "genre": session.genre.name,
-                "movies": serializer.data
+                "movies": serializer.data,
+                "exhausted": False,
+                "remaining_candidates": len(all_candidate_ids) - batch_size,  # ✅ NEW
             },
             status=status.HTTP_200_OK
         )
