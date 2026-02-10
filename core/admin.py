@@ -10,7 +10,7 @@ class MovieAdmin(admin.ModelAdmin):
     list_filter = ('original_language', 'genres', 'release_date')
     search_fields = ('title', 'tmdb_id')
     filter_horizontal = ('genres',)
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at',)
 
 @admin.register(Genre)
 class GenreAdmin(admin.ModelAdmin):
