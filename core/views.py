@@ -582,96 +582,129 @@ class SwipeCreateView(APIView):
         # 5. Create swipe (unique constraint enforced at DB level)
         try:
             swipe = Swipe.objects.create(
-                
                 user=request.user,
                 session=session,
                 movie=movie,
                 reaction=reaction
             )
+            
+            # Update stats safely
             stats, _ = SessionStats.objects.get_or_create(session=session)
             stats.total_swipes += 1
             stats.save(update_fields=["total_swipes"])
+            
             # Notify partner that a swipe happened
             channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                f"session_{session.id}",
-                {
-                    "type": "swipe_event",
-                    "user_id": request.user.id,
-                }
-            )
+            if channel_layer:  # ✅ SAFER: Check if channel layer exists
+                async_to_sync(channel_layer.group_send)(
+                    f"session_{session.id}",
+                    {
+                        "type": "swipe_event",
+                        "user_id": request.user.id,
+                    }
+                )
         except IntegrityError:
             return Response(
                 {"success": False, "error": "Already swiped on this movie"},
                 status=status.HTTP_409_CONFLICT
             )
-        user_a, user_b = normalize_pair(session.host, session.guest)
-
-        for tag in movie.tags.all():
-            # Taste signal
-            signal, _ = UserTasteSignal.objects.get_or_create(
-                user=request.user,
-                tag=tag
+        except Exception as e:
+            # ✅ ADD GENERIC ERROR HANDLING
+            print(f"Swipe creation error: {str(e)}")  # Log for debugging
+            return Response(
+                {"success": False, "error": "Failed to record swipe"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-            if reaction == Swipe.LIKE:
-                signal.like_count += 1
-            else:
-                signal.dislike_count += 1
+        # ✅ SAFER: Wrap user analysis in try/except
+        try:
+            user_a, user_b = normalize_pair(session.host, session.guest)
 
-            signal.save(update_fields=["like_count", "dislike_count", "last_interacted_at"])
+            for tag in movie.tags.all():
+                # Taste signal
+                signal, _ = UserTasteSignal.objects.get_or_create(
+                    user=request.user,
+                    tag=tag
+                )
 
-            # Session drift signal
-            chemistry, _ = SessionChemistry.objects.get_or_create(
-                user_a=user_a,
-                user_b=user_b,
-                tag=tag.name
-            )
+                if reaction == Swipe.LIKE:
+                    signal.like_count += 1
+                else:
+                    signal.dislike_count += 1
 
-            chemistry.swipe_count += 1
-            chemistry.save(update_fields=["swipe_count"])
+                signal.save(update_fields=["like_count", "dislike_count"])
 
+                # Session drift signal
+                chemistry, _ = SessionChemistry.objects.get_or_create(
+                    user_a=user_a,
+                    user_b=user_b,
+                    tag=tag.name
+                )
+
+                chemistry.swipe_count += 1
+                chemistry.save(update_fields=["swipe_count"])
+        except Exception as e:
+            print(f"User analysis error: {str(e)}")  # Log but don't fail swipe
+            pass  # Continue even if analytics fail
 
         # 6. Match detection
         match_created = False
 
         if reaction == Swipe.LIKE:
-            liked_users = Swipe.objects.filter(
-                session=session,
-                movie=movie,
-                reaction=Swipe.LIKE
-            ).values_list("user_id", flat=True)
+            try:
+                liked_users = Swipe.objects.filter(
+                    session=session,
+                    movie=movie,
+                    reaction=Swipe.LIKE
+                ).values_list("user_id", flat=True)
 
-            if len(set(liked_users)) == 2:
-                Match.objects.create(session=session, movie=movie)
-                user_a, user_b = normalize_pair(session.host, session.guest)
+                if len(set(liked_users)) == 2:
+                    Match.objects.create(session=session, movie=movie)
+                    
+                    # Update match stats safely
+                    try:
+                        stats, _ = SessionStats.objects.get_or_create(session=session)
+                        stats.total_matches += 1
+                        stats.save(update_fields=["total_matches"])
+                    except Exception:
+                        pass  # Continue even if stats fail
 
-                for tag in movie.tags.all():
-                    chemistry, _ = SessionChemistry.objects.get_or_create(
-                        user_a=user_a,
-                        user_b=user_b,
-                        tag=tag.name
-                    )
+                    # Update chemistry safely
+                    try:
+                        user_a, user_b = normalize_pair(session.host, session.guest)
+                        for tag in movie.tags.all():
+                            chemistry, _ = SessionChemistry.objects.get_or_create(
+                                user_a=user_a,
+                                user_b=user_b,
+                                tag=tag.name
+                            )
+                            chemistry.match_count += 1
+                            chemistry.last_matched_at = timezone.now()
+                            chemistry.save(update_fields=["match_count", "last_matched_at"])
+                    except Exception:
+                        pass  # Continue even if chemistry fails
 
-                    chemistry.match_count += 1
-                    chemistry.last_matched_at = timezone.now()
-                    chemistry.save(update_fields=["match_count", "last_matched_at"])
-                match_created = True
-                stats, _ = SessionStats.objects.get_or_create(session=session)
-                stats.total_matches += 1
-                stats.save(update_fields=["total_matches"])
+                    match_created = True
 
-                # Emit WebSocket event
-                channel_layer = get_channel_layer()
-                async_to_sync(channel_layer.group_send)(
-                    f"session_{session.id}",
-                    {
-                        "type": "match_event",
-                        "session_id": session.id,
-                        "movie_id": movie.id,
-                        "movie_title": movie.title,
-                    }
-                )
+                    # Emit WebSocket event safely
+                    try:
+                        channel_layer = get_channel_layer()
+                        if channel_layer:
+                            async_to_sync(channel_layer.group_send)(
+                                f"session_{session.id}",
+                                {
+                                    "type": "match_event",
+                                    "session_id": session.id,
+                                    "movie_id": movie.id,
+                                    "movie_title": movie.title or "Unknown Movie",
+                                }
+                            )
+                    except Exception:
+                        pass  # Continue even if WebSocket fails
+
+            except Exception as e:
+                print(f"Match detection error: {str(e)}")  # Log but don't fail
+                pass  # Continue even if match detection fails
 
         # 7. Final response
         return Response(
@@ -684,8 +717,6 @@ class SwipeCreateView(APIView):
             },
             status=status.HTTP_201_CREATED
         )
-
-
 
 
 class SwipeUndoView(APIView):
