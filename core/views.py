@@ -11,6 +11,8 @@ from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.template.loader import render_to_string
+from django.contrib.auth import authenticate
+from django.db import IntegrityError
 
 
 from channels.layers import get_channel_layer
@@ -350,18 +352,55 @@ class LoginView(ObtainAuthToken):
     Authenticate a user and return a token.
     """
     permission_classes = [AllowAny]
-    authetication_classes = []
+    authentication_classes = []
 
     def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        token = Token.objects.get(key=response.data["token"])
+        try:
+            print("=== LOGIN ATTEMPT ===")
+            print(f"Login data received: {request.data}")
+            
+            # Extract login credentials
+            email_or_username = request.data.get('username', '')
+            password = request.data.get('password', '')
+            
+            print(f"Attempting login with identifier: {email_or_username}")
+            
+            if not email_or_username or not password:
+                return Response({
+                    "success": False,
+                    "error": "Email/username and password are required."
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Use Django's authenticate with our custom backend
+            user = authenticate(request, username=email_or_username, password=password)
+            
+            if user is not None:
+                # Create or get token
+                token, created = Token.objects.get_or_create(user=user)
+                
+                return Response({
+                    "success": True,
+                    "token": token.key,
+                    "user_id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "message": "Login successful!"
+                })
+            else:
+                return Response({
+                    "success": False,
+                    "error": "Invalid credentials. Please check your email/username and password."
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            print(f"Login error: {str(e)}")
+            import traceback
+            print(f"Full traceback: {traceback.format_exc()}")
+            return Response({
+                "success": False,
+                "error": f"Login failed: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({
-            "success": True,
-            "token": token.key,
-            "user_id": token.user.id,
-            "username": token.user.username,
-        })
 
 
 # -------------------------------------------------------------------
