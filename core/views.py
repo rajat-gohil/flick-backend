@@ -1063,21 +1063,33 @@ class GenreListView(APIView):
 
     def get(self, request):
         industry = request.query_params.get("industry")
-
-        if industry not in ["bollywood", "hollywood"]:
+        
+        if not industry:
             return Response(
-                {"success": False, "error": "Valid industry required"},
+                {"success": False, "error": "industry param required"},
                 status=400
             )
 
-        if industry == "bollywood":
-            languages = ["hi", "ta", "te", "bn", "mr", "gu", "kn", "ml", "pa"]
-        else:
-            languages = ["en"]
+        # ✅ ADD mixed industry support
+        if industry not in ["bollywood", "hollywood", "mixed"]:
+            return Response(
+                {"success": False, "error": "Invalid industry"},
+                status=400
+            )
 
-        genres = Genre.objects.filter(
-            movie__original_language__in=languages
-        ).distinct().order_by("name")
+        # For mixed industry, return all genres (no language filter)
+        if industry == "mixed":
+            genres = Genre.objects.all().order_by("name")
+        else:
+            # Existing logic for bollywood/hollywood
+            if industry == "bollywood":
+                languages = ["hi", "ta", "te", "bn", "mr", "gu", "kn", "ml", "pa"]
+            else:  # hollywood
+                languages = ["en"]
+
+            genres = Genre.objects.filter(
+                movie__original_language__in=languages
+            ).distinct().order_by("name")
 
         return Response(
             {
@@ -1086,6 +1098,7 @@ class GenreListView(APIView):
             },
             status=200
         )
+
 
     
 class SessionDetailView(APIView):
