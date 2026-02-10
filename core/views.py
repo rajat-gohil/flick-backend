@@ -203,22 +203,49 @@ class MovieDeleteView(generics.DestroyAPIView):
 
 class RegisterView(APIView):
     """
-    Register a new user account.
+    Register a new user account with email and username.
     """
     permission_classes = [AllowAny]
-    authetication_classes = []
+    authentication_classes = []  # Fixed typo: was "authetication_classes"
 
     def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
+        # Get email and password from request
+        email = request.data.get('email')
+        password = request.data.get('password')
+        
+        if not email or not password:
+            return Response(
+                {"success": False, "error": "Email and password are required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Check if user already exists
+        if User.objects.filter(email=email).exists():
+            return Response(
+                {"success": False, "error": "Email already registered"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        serializer.save()
-        return Response(
-            {"success": True, "message": "User registered successfully"},
-            status=status.HTTP_201_CREATED
-        )
+        try:
+            # Create user with email as username initially
+            user = User.objects.create_user(
+                username=email,  # Temporary - will be replaced with actual username
+                email=email,
+                password=password
+            )
+            
+            return Response({
+                "success": True, 
+                "message": "User registered successfully",
+                "user_id": user.id
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response({
+                "success": False, 
+                "error": str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class LoginView(ObtainAuthToken):
@@ -1259,7 +1286,7 @@ class UserProfileView(APIView):
 
 class UpdateUsernameView(APIView):
     """
-    Update user's username.
+    Update user's username after registration.
     """
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -1269,7 +1296,8 @@ class UpdateUsernameView(APIView):
         username = request.data.get("username")
         user_id = request.data.get("user_id")  # For registration flow
 
-        if user_id:
+        # Allow admin or user to update username
+        if user_id and user.is_staff:
             try:
                 user = User.objects.get(id=user_id)
             except User.DoesNotExist:
@@ -1298,5 +1326,3 @@ class UpdateUsernameView(APIView):
             "success": True,
             "message": "Username updated successfully"
         })
-
-        #test#
