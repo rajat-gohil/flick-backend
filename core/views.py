@@ -208,33 +208,43 @@ class MovieDeleteView(generics.DestroyAPIView):
 
 class RegisterView(APIView):
     """
-    Register a new user account with email and username.
+    Register a new user account.
     """
     permission_classes = [AllowAny]
-    authentication_classes = []  # Fixed typo: was "authetication_classes"
+    authentication_classes = []
 
     def post(self, request):
-        # Get email and password from request
+        # Log incoming data for debugging
+        print("Registration request data:", request.data)
+        
         email = request.data.get('email')
         password = request.data.get('password')
         
+        # Validate required fields
         if not email or not password:
-            return Response(
-                {"success": False, "error": "Email and password are required"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                "success": False, 
+                "error": "Email and password are required"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate email format
+        if not '@' in email:
+            return Response({
+                "success": False, 
+                "error": "Please provide a valid email address"
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if user already exists
         if User.objects.filter(email=email).exists():
-            return Response(
-                {"success": False, "error": "Email already registered"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                "success": False, 
+                "error": "An account with this email already exists"
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             # Create user with email as username initially
             user = User.objects.create_user(
-                username=email,  # Temporary - will be replaced with actual username
+                username=email,  # Using email as username
                 email=email,
                 password=password
             )
@@ -246,9 +256,10 @@ class RegisterView(APIView):
             }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
+            print("Registration error:", str(e))  # Log the error
             return Response({
                 "success": False, 
-                "error": str(e)
+                "error": "Registration failed. Please try again."
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
