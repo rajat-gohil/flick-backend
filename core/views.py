@@ -1286,67 +1286,47 @@ class UserProfileView(APIView):
                 "username": user.username,
                 "email": user.email,
                 "date_joined": user.date_joined,
+                "is_staff": user.is_staff,
             }
         })
 
+
 class UpdateUsernameView(APIView):
     """
-    Update user's username after registration or anytime.
+    Update user's username (separate from email).
     """
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         user = request.user
-        username = request.data.get("username")
-        user_id = request.data.get("user_id")  # For registration flow
+        new_username = request.data.get("username")
 
-        # Special case: Allow setting username immediately after registration
-        if user_id and not request.user.is_authenticated:
-            try:
-                # Temporarily allow this for registration flow
-                user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
-                return Response({
-                    "success": False,
-                    "error": "User not found"
-                }, status=404)
-        elif user_id and request.user.is_authenticated:
-            # Admin or user updating their own username
-            if request.user.is_staff or request.user.id == user_id:
-                try:
-                    user = User.objects.get(id=user_id)
-                except User.DoesNotExist:
-                    return Response({
-                        "success": False,
-                        "error": "User not found"
-                    }, status=404)
-            else:
-                return Response({
-                    "success": False,
-                    "error": "Permission denied"
-                }, status=403)
-
-        if not username:
+        if not new_username:
             return Response({
                 "success": False,
                 "error": "Username is required"
             }, status=400)
 
-        # Check if username is taken
-        if User.objects.filter(username=username).exclude(id=user.id).exists():
+        # Check if username is taken by another user
+        if User.objects.filter(username=new_username).exclude(id=user.id).exists():
             return Response({
                 "success": False,
                 "error": "Username is already taken"
             }, status=400)
 
-        user.username = username
-        user.save()
+        # Update username only (email stays the same)
+        old_username = user.username
+        user.username = new_username
+        user.save(update_fields=['username'])
 
         return Response({
             "success": True,
-            "message": "Username updated successfully"
+            "message": f"Username updated from '{old_username}' to '{new_username}'",
+            "username": new_username,
+            "email": user.email  # Email remains unchanged
         })
+
 
 class PasswordResetRequestView(APIView):
     """

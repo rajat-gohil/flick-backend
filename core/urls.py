@@ -56,8 +56,8 @@ urlpatterns = [
     path('sessions/preferences/', SessionSetPreferencesView.as_view()),
     path('users/profile/', UserProfileView.as_view()),
     path('users/update-username/', UpdateUsernameView.as_view()),
-    path('api/auth/password-reset/', PasswordResetRequestView.as_view()),
-    path('api/auth/password-reset-confirm/', PasswordResetConfirmView.as_view()),
+    path('auth/password-reset/', PasswordResetRequestView.as_view()),
+    path('auth/password-reset-confirm/', PasswordResetConfirmView.as_view()),
 
 ]
 

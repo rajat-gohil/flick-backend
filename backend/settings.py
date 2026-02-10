@@ -103,6 +103,10 @@ if not DEBUG:
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+AUTHENTICATION_BACKENDS = [
+    'core.backends.EmailOrUsernameModelBackend',  # Custom backend
+    'django.contrib.auth.backends.ModelBackend',   # Default backend as fallback
+]
 
 
 DATABASE_URL = os.environ.get("DATABASE_URL")

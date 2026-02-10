@@ -6,13 +6,6 @@ echo "▶️ Starting Flick backend..."
 echo "🧱 Running database migrations..."
 python manage.py migrate --noinput
 
-# Create/update admin user (uses env vars for security)
-echo "👤 Creating/updating admin user..."
-python manage.py create_admin \
-  --username="${ADMIN_USERNAME:-rajat}" \
-  --email="${ADMIN_EMAIL:-rajat@flick.com}" \
-  --password="${ADMIN_PASSWORD:-rajatgohil}"
-
 # Optional one-time / manual syncs
 # These should NOT run on every deploy
 if [[ "$SYNC_TMDB_GENRES" == "true" ]]; then
