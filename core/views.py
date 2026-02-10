@@ -350,6 +350,7 @@ class RegisterView(APIView):
 class LoginView(ObtainAuthToken):
     """
     Authenticate a user and return a token.
+    Can login with either username or email.
     """
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -359,20 +360,20 @@ class LoginView(ObtainAuthToken):
             print("=== LOGIN ATTEMPT ===")
             print(f"Login data received: {request.data}")
             
-            # Extract login credentials
-            email_or_username = request.data.get('username', '')
+            # Extract login credentials - accept both username and email
+            username_input = request.data.get('username') or request.data.get('email', '')
             password = request.data.get('password', '')
             
-            print(f"Attempting login with identifier: {email_or_username}")
+            print(f"Login attempt with identifier: '{username_input}'")
             
-            if not email_or_username or not password:
+            if not username_input or not password:
                 return Response({
                     "success": False,
-                    "error": "Email/username and password are required."
+                    "error": "Username/email and password are required."
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Use Django's authenticate with our custom backend
-            user = authenticate(request, username=email_or_username, password=password)
+            # Use Django's authenticate - our custom backend handles both
+            user = authenticate(request, username=username_input, password=password)
             
             if user is not None:
                 # Create or get token
@@ -389,7 +390,7 @@ class LoginView(ObtainAuthToken):
             else:
                 return Response({
                     "success": False,
-                    "error": "Invalid credentials. Please check your email/username and password."
+                    "error": "Invalid credentials. Please check your username/email and password."
                 }, status=status.HTTP_400_BAD_REQUEST)
                 
         except Exception as e:
@@ -400,6 +401,7 @@ class LoginView(ObtainAuthToken):
                 "success": False,
                 "error": f"Login failed: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
