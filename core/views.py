@@ -1426,13 +1426,13 @@ class UserProfileView(APIView):
 
 class UpdateUsernameView(APIView):
     """
-    Update user's username (separate from email).
+    Update current authenticated user's username.
     """
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        user = request.user
+        user = request.user  # ✅ Use authenticated user, not user_id
         new_username = request.data.get("username")
 
         if not new_username:
@@ -1448,7 +1448,7 @@ class UpdateUsernameView(APIView):
                 "error": "Username is already taken"
             }, status=400)
 
-        # Update username only (email stays the same)
+        # Update username only
         old_username = user.username
         user.username = new_username
         user.save(update_fields=['username'])
@@ -1457,8 +1457,8 @@ class UpdateUsernameView(APIView):
             "success": True,
             "message": f"Username updated from '{old_username}' to '{new_username}'",
             "username": new_username,
-            "email": user.email  # Email remains unchanged
         })
+
 
 
 class PasswordResetRequestView(APIView):
