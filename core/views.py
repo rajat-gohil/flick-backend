@@ -208,59 +208,140 @@ class MovieDeleteView(generics.DestroyAPIView):
 
 class RegisterView(APIView):
     """
-    Register a new user account.
+    Register a new user account with email and password.
     """
     permission_classes = [AllowAny]
     authentication_classes = []
 
     def post(self, request):
-        # Log incoming data for debugging
-        print("Registration request data:", request.data)
+        print("=" * 60)
+        print("=== DETAILED REGISTRATION DEBUGGING ===")
+        print("=" * 60)
         
+        # Log everything about the request
+        print(f"1. HTTP Method: {request.method}")
+        print(f"2. Content-Type: {request.content_type}")
+        print(f"3. Request Headers: {dict(request.headers)}")
+        
+        # Try to log raw body
+        try:
+            raw_body = request.body.decode('utf-8')
+            print(f"4. Raw Request Body: {raw_body}")
+        except Exception as e:
+            print(f"4. Error reading raw body: {e}")
+        
+        print(f"5. Parsed Request Data: {request.data}")
+        print(f"6. Data Type: {type(request.data)}")
+        
+        # Check if data exists
+        if not request.data:
+            print("❌ ERROR: No data received!")
+            return Response({
+                "success": False,
+                "error": "No registration data received. Please check your internet connection and try again."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not isinstance(request.data, dict):
+            print("❌ ERROR: Data is not a dictionary!")
+            return Response({
+                "success": False,
+                "error": "Invalid data format received."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Extract fields with detailed logging
         email = request.data.get('email')
         password = request.data.get('password')
         
+        print(f"7. Extracted Email: {email} (type: {type(email)})")
+        print(f"8. Extracted Password: {'*' * len(password) if password else 'None'} (type: {type(password)})")
+        
         # Validate required fields
-        if not email or not password:
+        if email is None:
+            print("❌ ERROR: Email is None!")
             return Response({
-                "success": False, 
-                "error": "Email and password are required"
+                "success": False,
+                "error": "Email field is missing from request."
             }, status=status.HTTP_400_BAD_REQUEST)
-
+        
+        if password is None:
+            print("❌ ERROR: Password is None!")
+            return Response({
+                "success": False,
+                "error": "Password field is missing from request."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Convert to strings if needed
+        if not isinstance(email, str):
+            print(f"⚠️  WARNING: Email is not string, converting: {email}")
+            email = str(email)
+        
+        if not isinstance(password, str):
+            print(f"⚠️  WARNING: Password is not string, converting: {password}")
+            password = str(password)
+        
+        email = email.strip()
+        print(f"9. Processed Email: '{email}'")
+        
         # Validate email format
-        if not '@' in email:
+        if not email or '@' not in email or '.' not in email.split('@')[-1]:
+            print(f"❌ ERROR: Invalid email format: '{email}'")
             return Response({
-                "success": False, 
-                "error": "Please provide a valid email address"
+                "success": False,
+                "error": f"Invalid email format: '{email}'. Please enter a valid email address."
             }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Check if user already exists
-        if User.objects.filter(email=email).exists():
+        
+        # Validate password
+        if len(password) < 6:
+            print(f"❌ ERROR: Password too short: {len(password)} characters")
             return Response({
-                "success": False, 
-                "error": "An account with this email already exists"
+                "success": False,
+                "error": f"Password must be at least 6 characters long. Yours is {len(password)} characters."
             }, status=status.HTTP_400_BAD_REQUEST)
-
+        
+        # Check user existence
+        print("10. Checking if user already exists...")
         try:
-            # Create user with email as username initially
+            if User.objects.filter(email=email).exists():
+                print(f"❌ ERROR: User already exists with email: {email}")
+                return Response({
+                    "success": False,
+                    "error": "An account with this email already exists. Please try logging in instead."
+                }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                print("✅ No existing user found with this email")
+        except Exception as e:
+            print(f"⚠️  WARNING: Error checking user existence: {e}")
+        
+        # Try to create user
+        print("11. Attempting to create user...")
+        try:
             user = User.objects.create_user(
-                username=email,  # Using email as username
+                username=email,
                 email=email,
                 password=password
             )
-            
+            print(f"✅ SUCCESS: User created with ID {user.id}")
             return Response({
-                "success": True, 
-                "message": "User registered successfully",
+                "success": True,
+                "message": "Account created successfully! Welcome to Flick.",
                 "user_id": user.id
             }, status=status.HTTP_201_CREATED)
             
-        except Exception as e:
-            print("Registration error:", str(e))  # Log the error
+        except IntegrityError as e:
+            print(f"❌ INTEGRITY ERROR: {str(e)}")
             return Response({
-                "success": False, 
-                "error": "Registration failed. Please try again."
+                "success": False,
+                "error": "An account with this email already exists. Please try logging in."
             }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            print(f"❌ UNEXPECTED ERROR: {str(e)}")
+            import traceback
+            print(f"FULL TRACEBACK:\n{traceback.format_exc()}")
+            return Response({
+                "success": False,
+                "error": f"Registration failed: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
