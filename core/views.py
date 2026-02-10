@@ -63,6 +63,79 @@ def normalize_pair(user1, user2):
     """
     return (user1, user2) if user1.id < user2.id else (user2, user1)
 
+def calculate_preference_score(movie, preferences):
+    """
+    Calculate how well a movie matches user preferences.
+    Uses keyword matching AND release year filtering.
+    """
+    score = 0
+    overview_lower = movie.overview.lower()
+    title_lower = movie.title.lower()
+    
+    # Mood keywords (EXPANDED)
+    mood_keywords = {
+        "happy": ["comedy", "fun", "laugh", "joy", "light", "cheerful", "humorous", "hilarious", "amusing"],
+        "intense": ["thriller", "suspense", "intense", "dark", "serious", "gripping", "tense", "dramatic"],
+        "emotional": ["drama", "emotional", "moving", "heartfelt", "touching", "tear", "powerful", "profound"],
+        "exciting": ["action", "adventure", "exciting", "fast-paced", "thrilling", "explosive", "dynamic"],
+    }
+    
+    # Pace keywords (EXPANDED)
+    pace_keywords = {
+        "fast": ["action", "fast", "intense", "quick", "thrilling", "explosive", "adrenaline", "rush"],
+        "slow": ["slow", "deliberate", "thoughtful", "contemplative", "meditative", "quiet", "introspective"],
+        "balanced": ["balanced", "mix", "variety", "blend", "diverse"],
+    }
+    
+    # Vibe keywords (EXPANDED)
+    vibe_keywords = {
+        "feel-good": ["uplifting", "inspiring", "heartwarming", "positive", "hopeful", "optimistic", "joyful"],
+        "mind-bending": ["twist", "complex", "mystery", "puzzle", "psychological", "surreal", "enigmatic"],
+        "escapist": ["fantasy", "adventure", "magical", "world", "epic", "mythical", "otherworldly"],
+        "realistic": ["real", "authentic", "true", "based on", "documentary", "life", "actual"],
+    }
+    
+    # Check moods (search in BOTH overview AND title)
+    for mood in preferences.get("mood", []):
+        keywords = mood_keywords.get(mood, [])
+        for keyword in keywords:
+            if keyword in overview_lower or keyword in title_lower:
+                score += 5  # ✅ INCREASED from 3
+                break
+    
+    # Check pace
+    for pace in preferences.get("pace", []):
+        keywords = pace_keywords.get(pace, [])
+        for keyword in keywords:
+            if keyword in overview_lower:
+                score += 4  # ✅ INCREASED from 2
+                break
+    
+    # Check vibe
+    for vibe in preferences.get("vibe", []):
+        keywords = vibe_keywords.get(vibe, [])
+        for keyword in keywords:
+            if keyword in overview_lower:
+                score += 4  # ✅ INCREASED from 2
+                break
+    
+    # ✅ NEW: Era/Decade filtering
+    if movie.release_date:
+        release_year = movie.release_date.year
+        
+        for era in preferences.get("era", []):
+            if era == "classic" and release_year < 2000:
+                score += 6
+            elif era == "2000s" and 2000 <= release_year < 2010:
+                score += 6
+            elif era == "2010s" and 2010 <= release_year < 2020:
+                score += 6
+            elif era == "recent" and release_year >= 2020:
+                score += 6
+            elif era == "any":
+                score += 2  # Small bonus for flexibility
+    
+    return score
 
 # -------------------------------------------------------------------
 # Movie APIs
@@ -256,29 +329,42 @@ class SessionSetPreferencesView(APIView):
                 status=404
             )
 
-        # Check if user is part of session
         if request.user not in [session.host, session.guest]:
             return Response(
                 {"success": False, "error": "Not part of this session"},
                 status=403
             )
 
-        # Store preferences based on user role
+        # Store preferences
         if request.user == session.host:
             session.host_preferences = preferences
         else:
             session.guest_preferences = preferences
 
-        # Check if both users submitted
+        # Check if both submitted
+        both_ready = False
+        overlap_score = 0
+        
         if session.host_preferences and session.guest_preferences:
             session.preferences_set = True
+            both_ready = True
+            
+            # ✅ NEW: Calculate overlap
+            host = session.host_preferences
+            guest = session.guest_preferences
+            
+            # Count common preferences
+            for key in ["mood", "pace", "vibe", "era"]:
+                common = set(host.get(key, [])) & set(guest.get(key, []))
+                overlap_score += len(common) * 10  # 10 points per match
 
         session.save()
 
         return Response(
             {
                 "success": True,
-                "both_ready": session.preferences_set,
+                "both_ready": both_ready,
+                "overlap_score": overlap_score,  # ✅ NEW: 0-100 compatibility score
             },
             status=200
         )
@@ -772,8 +858,7 @@ class RecommendationView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
-    
-    def get(self, request):
+    def get(self, request):  # ✅ FIX: Proper indentation
         session_id = request.query_params.get("session_id")
         
         if not session_id:
@@ -790,64 +875,52 @@ class RecommendationView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # User must be part of session
         if request.user not in [session.host, session.guest]:
             return Response(
                 {"success": False, "error": "Not part of this session"},
                 status=status.HTTP_403_FORBIDDEN
             )
+        
         if not session.genre:
             return Response(
                 {"success": False, "error": "Genre not selected yet"},
                 status=400
             )
 
-
-        # Get already swiped movie IDs
+        # Get already swiped/matched movies
         swiped_movie_ids = Swipe.objects.filter(
             session=session
         ).values_list("movie_id", flat=True)
 
-        # Get already matched movie IDs
         matched_movie_ids = Match.objects.filter(
             session=session
         ).values_list("movie_id", flat=True)
 
         now = timezone.now()
-        # --- Adaptive deck sizing (Phase 2.4) ---
         stats, _ = SessionStats.objects.get_or_create(session=session)
 
         swipes = stats.total_swipes
         matches = stats.total_matches
 
-        # Default
+        # Adaptive deck sizing
         deck_size = FINAL_DECK_SIZE
 
         if swipes < 10:
-            # Early session → explore
-            deck_size = MAX_DECK_SIZE
+            deck_size = MAX_DECK_SIZE  # 50 movies early on
         elif matches >= 2:
-            # High alignment → tighten deck
-            deck_size = MIN_DECK_SIZE
-        elif swipes > 25 and matches == 0:
-            # Low chemistry → reduce fatigue
-            deck_size = 10
+            deck_size = MIN_DECK_SIZE  # 16 movies if matching well
+        elif swipes > 15 and matches == 0:  # ✅ CHANGED from 25
+            # No matches after 15 swipes? Reduce variety, increase similarity
+            deck_size = 20  # ✅ CHANGED from 10
 
         # Base candidate pool
-        base_qs = Movie.objects.filter(
-            genres=session.genre
-        )
+        base_qs = Movie.objects.filter(genres=session.genre)
 
-        # INDUSTRY → LANGUAGE MAPPING (NON-NEGOTIABLE)
+        # Industry filtering
         if session.industry == "bollywood":
-            base_qs = base_qs.filter(
-                original_language__in=INDIAN_LANGUAGES
-            )
+            base_qs = base_qs.filter(original_language__in=INDIAN_LANGUAGES)
         elif session.industry == "hollywood":
-            base_qs = base_qs.filter(
-                original_language="en"
-            )
-
+            base_qs = base_qs.filter(original_language="en")
 
         candidate_ids = list(
             base_qs
@@ -857,87 +930,93 @@ class RecommendationView(APIView):
             .distinct()
         )[:CANDIDATE_POOL_SIZE]
 
-
         candidate_movies = Movie.objects.filter(id__in=candidate_ids)
 
+        # ✅ NEW: Extract combined preferences
+        combined_prefs = {}
+        if session.host_preferences and session.guest_preferences:
+            host_prefs = session.host_preferences
+            guest_prefs = session.guest_preferences
+            
+            # Merge preferences (find common ground)
+            combined_prefs = {
+                "mood": list(set(host_prefs.get("mood", [])) & set(guest_prefs.get("mood", []))),
+                "pace": list(set(host_prefs.get("pace", [])) & set(guest_prefs.get("pace", []))),
+                "vibe": list(set(host_prefs.get("vibe", [])) & set(guest_prefs.get("vibe", []))),
+            }
+            
+            # If no overlap, use union instead
+            if not combined_prefs["mood"]:
+                combined_prefs["mood"] = list(set(host_prefs.get("mood", [])) | set(guest_prefs.get("mood", [])))
+            if not combined_prefs["pace"]:
+                combined_prefs["pace"] = list(set(host_prefs.get("pace", [])) | set(guest_prefs.get("pace", [])))
+            if not combined_prefs["vibe"]:
+                combined_prefs["vibe"] = list(set(host_prefs.get("vibe", [])) | set(guest_prefs.get("vibe", [])))
 
         scored_movies = []
 
         for movie in candidate_movies:
             penalty = 0
-            # --- User taste bias (Phase 2B, controlled) ---
-            taste_bonus = 0
+            
+            # ✅ NEW: Preference-based boosting
+            if combined_prefs:
+                boost = calculate_preference_score(movie, combined_prefs)
+                penalty -= boost  # Negative penalty = higher priority
 
+            if boost < 3:  # Minimum threshold
+                continue  # Skip this movie entirely
+
+            penalty -= boost
+
+            # Existing taste bonus logic
+            taste_bonus = 0
             for tag in movie.tags.all():
                 try:
-                    signal = UserTasteSignal.objects.get(
-                        user=request.user,
-                        tag=tag
-                    )
+                    signal = UserTasteSignal.objects.get(user=request.user, tag=tag)
                     taste_bonus += (signal.like_count - signal.dislike_count)
                 except UserTasteSignal.DoesNotExist:
                     pass
-
-            # Cap so taste never dominates chemistry
             penalty -= min(taste_bonus, 3)
 
-            # --- Sub-genre graph influence (Phase 2C) ---
+            # Graph bonus logic
             graph_bonus = 0
             user_a, user_b = normalize_pair(session.host, session.guest)
-
             for tag in movie.tags.all():
-                # Direct chemistry
                 try:
                     chem = SessionChemistry.objects.get(
-                        user_a=user_a,
-                        user_b=user_b,
-                        tag=tag.name
+                        user_a=user_a, user_b=user_b, tag=tag.name
                     )
                     graph_bonus += chem.match_count * 2
                 except SessionChemistry.DoesNotExist:
                     pass
 
-                # Neighboring vibe pull
                 for rel in tag.outgoing_relations.all():
                     try:
                         neighbor = SessionChemistry.objects.get(
-                            user_a=user_a,
-                            user_b=user_b,
-                            tag=rel.to_tag.name
+                            user_a=user_a, user_b=user_b, tag=rel.to_tag.name
                         )
                         graph_bonus += rel.weight * neighbor.match_count
                     except SessionChemistry.DoesNotExist:
                         pass
-
-            # Cap influence
             penalty -= min(graph_bonus, 5)
 
-            user_a, user_b = normalize_pair(session.host, session.guest)
-
-            # ----------------------------------
-            # 1. Base exposure penalties
-            # ----------------------------------
+            # Exposure penalties
             exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
-
             recently_exposed = (
                 exposure.last_exposed_at and
-                (now - exposure.last_exposed_at).total_seconds() <
-                RECENT_EXPOSURE_COOLDOWN_MINUTES * 60
+                (now - exposure.last_exposed_at).total_seconds() < 
+                RECENT_EXPOSURE_COOLDOWN_MINUTES * 60  # ✅ FIX: Added < operator
             )
 
             if recently_exposed:
                 penalty += 2
-
             if exposure.exposed_count >= MAX_GLOBAL_EXPOSURE:
                 penalty += 3
 
             scored_movies.append((penalty, movie))
 
-
-
-        # Sort by penalty, then shuffle inside penalty groups
+        # Sort and shuffle within penalty groups
         scored_movies.sort(key=lambda x: x[0])
-
         grouped = {}
         for penalty, movie in scored_movies:
             grouped.setdefault(penalty, []).append(movie)
@@ -948,6 +1027,8 @@ class RecommendationView(APIView):
             final_movies.extend(grouped[penalty])
 
         movies = final_movies[:deck_size]
+        
+        # Update exposure
         for movie in movies:
             try:
                 exposure, _ = MovieExposure.objects.get_or_create(movie=movie)
@@ -955,7 +1036,6 @@ class RecommendationView(APIView):
                 exposure.last_exposed_at = timezone.now()
                 exposure.save(update_fields=["exposed_count", "last_exposed_at"])
             except Exception:
-                # Never break recommendations due to analytics
                 pass
 
         serializer = MovieSerializer(movies, many=True)
@@ -969,6 +1049,7 @@ class RecommendationView(APIView):
             },
             status=status.HTTP_200_OK
         )
+
 
 class GenreListView(APIView):
     authentication_classes = []

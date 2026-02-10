@@ -95,7 +95,7 @@ class SessionDetailSerializer(serializers.ModelSerializer):
             "host_joined",
             "guest_joined",
             "ended",
-            "preferences_set",  # ✅ ADD THIS
+            "preferences_set",
             "quality_score",
             "highlights",
         ]
