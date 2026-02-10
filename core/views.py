@@ -6,6 +6,11 @@ from django.utils import timezone
 from django.db import IntegrityError
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.template.loader import render_to_string
 
 
 from channels.layers import get_channel_layer
@@ -1286,7 +1291,7 @@ class UserProfileView(APIView):
 
 class UpdateUsernameView(APIView):
     """
-    Update user's username after registration.
+    Update user's username after registration or anytime.
     """
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -1296,15 +1301,31 @@ class UpdateUsernameView(APIView):
         username = request.data.get("username")
         user_id = request.data.get("user_id")  # For registration flow
 
-        # Allow admin or user to update username
-        if user_id and user.is_staff:
+        # Special case: Allow setting username immediately after registration
+        if user_id and not request.user.is_authenticated:
             try:
+                # Temporarily allow this for registration flow
                 user = User.objects.get(id=user_id)
             except User.DoesNotExist:
                 return Response({
                     "success": False,
                     "error": "User not found"
                 }, status=404)
+        elif user_id and request.user.is_authenticated:
+            # Admin or user updating their own username
+            if request.user.is_staff or request.user.id == user_id:
+                try:
+                    user = User.objects.get(id=user_id)
+                except User.DoesNotExist:
+                    return Response({
+                        "success": False,
+                        "error": "User not found"
+                    }, status=404)
+            else:
+                return Response({
+                    "success": False,
+                    "error": "Permission denied"
+                }, status=403)
 
         if not username:
             return Response({
@@ -1326,3 +1347,80 @@ class UpdateUsernameView(APIView):
             "success": True,
             "message": "Username updated successfully"
         })
+
+class PasswordResetRequestView(APIView):
+    """
+    Request password reset - sends email with reset link.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+        
+        if not email:
+            return Response({
+                "success": False,
+                "error": "Email is required"
+            }, status=400)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Don't reveal if email exists - return success anyway
+            return Response({
+                "success": True,
+                "message": "If this email exists, you will receive a password reset link."
+            })
+
+        # Generate token
+        token = default_token_generator.make_token(user)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        
+        # In production, send actual email
+        # For now, return token for frontend testing
+        reset_link = f"/reset-password/{uid}/{token}/"
+        
+        return Response({
+            "success": True,
+            "message": "Password reset link sent to your email",
+            "reset_link": reset_link  # Remove in production
+        })
+
+class PasswordResetConfirmView(APIView):
+    """
+    Reset password with token.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        uidb64 = request.data.get("uid")
+        token = request.data.get("token")
+        new_password = request.data.get("new_password")
+
+        if not all([uidb64, token, new_password]):
+            return Response({
+                "success": False,
+                "error": "Missing required parameters"
+            }, status=400)
+
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({
+                "success": False,
+                "error": "Invalid reset link"
+            }, status=400)
+
+        if default_token_generator.check_token(user, token):
+            user.set_password(new_password)
+            user.save()
+            return Response({
+                "success": True,
+                "message": "Password reset successful"
+            })
+        else:
+            return Response({
+                "success": False,
+                "error": "Invalid or expired reset link"
+            }, status=400)

@@ -1,6 +1,5 @@
-from django.urls import path
+from django.urls import path, include
 from django.contrib import admin
-from django.urls import path
 from .views import (
     MovieListView,
     MovieDetailView,
@@ -26,6 +25,9 @@ from .views import (
     SessionSetPreferencesView,
     UserProfileView,
     UpdateUsernameView,
+    PasswordResetRequestView,
+    PasswordResetConfirmView,
+
     )
 
 urlpatterns = [
@@ -54,7 +56,8 @@ urlpatterns = [
     path('sessions/preferences/', SessionSetPreferencesView.as_view()),
     path('users/profile/', UserProfileView.as_view()),
     path('users/update-username/', UpdateUsernameView.as_view()),
+    path('api/auth/password-reset/', PasswordResetRequestView.as_view()),
+    path('api/auth/password-reset-confirm/', PasswordResetConfirmView.as_view()),
 
 ]
 
-#test#
