@@ -5,6 +5,7 @@ from datetime import timedelta
 from django.utils import timezone
 from django.db import IntegrityError
 from django.db import models
+from django.contrib.auth import get_user_model
 
 
 from channels.layers import get_channel_layer
@@ -35,6 +36,7 @@ from .models import MovieTag
 
 
 
+
 # -------------------------------------------------------------------
 # Recommendation shaping constants (Phase 2)
 # -------------------------------------------------------------------
@@ -46,6 +48,7 @@ FINAL_DECK_SIZE = 40
 MIN_DECK_SIZE = 16
 MAX_DECK_SIZE = 50
 INDIAN_LANGUAGES = ["hi", "ta", "te", "bn", "mr", "gu", "kn", "ml", "pa"]
+User = get_user_model()
 
 # -------------------------------------------------------------------
 # Utility helpers
@@ -1232,4 +1235,66 @@ class GenreSyncTMDBView(APIView):
             "success": True,
             "created": created,
             "updated": updated,
+        })
+
+
+class UserProfileView(APIView):
+    """
+    Get current user's profile information.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            "success": True,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "date_joined": user.date_joined,
+            }
+        })
+
+class UpdateUsernameView(APIView):
+    """
+    Update user's username.
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        username = request.data.get("username")
+        user_id = request.data.get("user_id")  # For registration flow
+
+        if user_id:
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "error": "User not found"
+                }, status=404)
+
+        if not username:
+            return Response({
+                "success": False,
+                "error": "Username is required"
+            }, status=400)
+
+        # Check if username is taken
+        if User.objects.filter(username=username).exclude(id=user.id).exists():
+            return Response({
+                "success": False,
+                "error": "Username is already taken"
+            }, status=400)
+
+        user.username = username
+        user.save()
+
+        return Response({
+            "success": True,
+            "message": "Username updated successfully"
         })
