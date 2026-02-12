@@ -41,9 +41,6 @@ from .models import MovieTagRelation
 from .models import MovieTag
 
 
-
-
-
 # -------------------------------------------------------------------
 # Recommendation shaping constants (Phase 2)
 # -------------------------------------------------------------------
@@ -216,51 +213,31 @@ class RegisterView(APIView):
     authentication_classes = []
 
     def post(self, request):
-        print("=" * 60)
-        print("=== DETAILED REGISTRATION DEBUGGING ===")
-        print("=" * 60)
-        
-        # Log everything about the request
-        print(f"1. HTTP Method: {request.method}")
-        print(f"2. Content-Type: {request.content_type}")
-        print(f"3. Request Headers: {dict(request.headers)}")
-        
-        # Try to log raw body
-        try:
-            raw_body = request.body.decode('utf-8')
-            print(f"4. Raw Request Body: {raw_body}")
-        except Exception as e:
-            print(f"4. Error reading raw body: {e}")
-        
-        print(f"5. Parsed Request Data: {request.data}")
-        print(f"6. Data Type: {type(request.data)}")
-        
         # Check if data exists
         if not request.data:
-            print("❌ ERROR: No data received!")
             return Response({
                 "success": False,
                 "error": "No registration data received. Please check your internet connection and try again."
             }, status=status.HTTP_400_BAD_REQUEST)
         
         if not isinstance(request.data, dict):
-            print("❌ ERROR: Data is not a dictionary!")
             return Response({
                 "success": False,
                 "error": "Invalid data format received."
             }, status=status.HTTP_400_BAD_REQUEST)
         
-      
+        # Extract fields
+        email = request.data.get('email')
+        password = request.data.get('password')
+        
         # Validate required fields
         if email is None:
-            print("❌ ERROR: Email is None!")
             return Response({
                 "success": False,
                 "error": "Email field is missing from request."
             }, status=status.HTTP_400_BAD_REQUEST)
         
         if password is None:
-            print("❌ ERROR: Password is None!")
             return Response({
                 "success": False,
                 "error": "Password field is missing from request."
@@ -268,19 +245,15 @@ class RegisterView(APIView):
         
         # Convert to strings if needed
         if not isinstance(email, str):
-            print(f"⚠️  WARNING: Email is not string, converting: {email}")
             email = str(email)
         
         if not isinstance(password, str):
-            print(f"⚠️  WARNING: Password is not string, converting: {password}")
             password = str(password)
         
         email = email.strip()
-        print(f"9. Processed Email: '{email}'")
         
         # Validate email format
         if not email or '@' not in email or '.' not in email.split('@')[-1]:
-            print(f"❌ ERROR: Invalid email format: '{email}'")
             return Response({
                 "success": False,
                 "error": f"Invalid email format: '{email}'. Please enter a valid email address."
@@ -288,35 +261,28 @@ class RegisterView(APIView):
         
         # Validate password
         if len(password) < 6:
-            print(f"❌ ERROR: Password too short: {len(password)} characters")
             return Response({
                 "success": False,
                 "error": f"Password must be at least 6 characters long. Yours is {len(password)} characters."
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Check user existence
-        print("10. Checking if user already exists...")
         try:
             if User.objects.filter(email=email).exists():
-                print(f"❌ ERROR: User already exists with email: {email}")
                 return Response({
                     "success": False,
                     "error": "An account with this email already exists. Please try logging in instead."
                 }, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                print("✅ No existing user found with this email")
         except Exception as e:
-            print(f"⚠️  WARNING: Error checking user existence: {e}")
+            pass
         
         # Try to create user
-        print("11. Attempting to create user...")
         try:
             user = User.objects.create_user(
                 username=email,
                 email=email,
                 password=password
             )
-            print(f"✅ SUCCESS: User created with ID {user.id}")
             return Response({
                 "success": True,
                 "message": "Account created successfully! Welcome to Flick.",
@@ -324,21 +290,16 @@ class RegisterView(APIView):
             }, status=status.HTTP_201_CREATED)
             
         except IntegrityError as e:
-            print(f"❌ INTEGRITY ERROR: {str(e)}")
             return Response({
                 "success": False,
                 "error": "An account with this email already exists. Please try logging in."
             }, status=status.HTTP_400_BAD_REQUEST)
             
         except Exception as e:
-            print(f"❌ UNEXPECTED ERROR: {str(e)}")
-            import traceback
-            print(f"FULL TRACEBACK:\n{traceback.format_exc()}")
             return Response({
                 "success": False,
                 "error": f"Registration failed: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 class LoginView(ObtainAuthToken):
@@ -351,14 +312,9 @@ class LoginView(ObtainAuthToken):
 
     def post(self, request, *args, **kwargs):
         try:
-            print("=== LOGIN ATTEMPT ===")
-            print(f"Login data received: {request.data}")
-            
             # Extract login credentials - accept both username and email
             username_input = request.data.get('username') or request.data.get('email', '')
             password = request.data.get('password', '')
-            
-            print(f"Login attempt with identifier: '{username_input}'")
             
             if not username_input or not password:
                 return Response({
@@ -388,15 +344,10 @@ class LoginView(ObtainAuthToken):
                 }, status=status.HTTP_400_BAD_REQUEST)
                 
         except Exception as e:
-            print(f"Login error: {str(e)}")
-            import traceback
-            print(f"Full traceback: {traceback.format_exc()}")
             return Response({
                 "success": False,
                 "error": f"Login failed: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
 
 # -------------------------------------------------------------------
@@ -772,7 +723,6 @@ class SwipeCreateView(APIView):
             )
         except Exception as e:
             # ✅ ADD GENERIC ERROR HANDLING
-            print(f"Swipe creation error: {str(e)}")  # Log for debugging
             return Response(
                 {"success": False, "error": "Failed to record swipe"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -806,7 +756,6 @@ class SwipeCreateView(APIView):
                 chemistry.swipe_count += 1
                 chemistry.save(update_fields=["swipe_count"])
         except Exception as e:
-            print(f"User analysis error: {str(e)}")  # Log but don't fail swipe
             pass  # Continue even if analytics fail
 
         # 6. Match detection
@@ -865,7 +814,6 @@ class SwipeCreateView(APIView):
                         pass  # Continue even if WebSocket fails
 
             except Exception as e:
-                print(f"Match detection error: {str(e)}")  # Log but don't fail
                 pass  # Continue even if match detection fails
 
         # 7. Final response
