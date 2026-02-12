@@ -250,13 +250,7 @@ class RegisterView(APIView):
                 "error": "Invalid data format received."
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Extract fields with detailed logging
-        email = request.data.get('email')
-        password = request.data.get('password')
-        
-        print(f"7. Extracted Email: {email} (type: {type(email)})")
-        print(f"8. Extracted Password: {'*' * len(password) if password else 'None'} (type: {type(password)})")
-        
+      
         # Validate required fields
         if email is None:
             print("❌ ERROR: Email is None!")
