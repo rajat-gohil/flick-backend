@@ -1480,6 +1480,7 @@ class PasswordResetConfirmView(APIView):
                 "error": "Invalid or expired reset link"
             }, status=400)
 
+# Update your MovieStreamingOptionsView in views.py
 class MovieStreamingOptionsView(APIView):
     """
     Get streaming options for a movie
@@ -1492,7 +1493,7 @@ class MovieStreamingOptionsView(APIView):
             # Get movie
             movie = Movie.objects.get(id=movie_id)
             
-            # Get streaming options
+            # Get streaming options (this might be empty initially)
             streaming_options = MovieStreamingAvailability.objects.filter(
                 movie=movie
             ).select_related('provider')
@@ -1517,3 +1518,10 @@ class MovieStreamingOptionsView(APIView):
                 "success": False,
                 "error": "Movie not found"
             }, status=404)
+        except Exception as e:
+            # Better error handling
+            print(f"Streaming options error: {str(e)}")  # Log for debugging
+            return Response({
+                "success": False,
+                "error": "Failed to load streaming options"
+            }, status=500)
