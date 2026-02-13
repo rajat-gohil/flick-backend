@@ -142,30 +142,6 @@ class Movie(models.Model):
         blank=True,
         db_index=True
     )
-    
-    streaming_url = models.URLField(blank=True, null=True)
-    
-    def get_streaming_redirect_url(self):
-        """
-        Generate streaming redirect URL for this match
-        """
-        if self.streaming_url:
-            return self.streaming_url
-            
-        # Generate URL if not exists
-        from .services.justwatch import get_streaming_redirect_url
-        redirect_url = get_streaming_redirect_url(
-            self.movie.title, 
-            self.movie.release_date.year if self.movie.release_date else None
-        )
-        
-        if redirect_url:
-            self.streaming_url = redirect_url
-            self.save(update_fields=['streaming_url'])
-            return redirect_url
-        
-        return None
-
 
     def __str__(self):
         return self.title
@@ -337,3 +313,26 @@ class MovieTagRelation(models.Model):
         return f"{self.from_tag} → {self.to_tag} ({self.weight})"
 
 
+class StreamingProvider(models.Model):
+    name = models.CharField(max_length=100)
+    logo_url = models.URLField(blank=True)
+    website_url = models.URLField(blank=True)
+    country_code = models.CharField(max_length=10, default='IN')  # India focused
+    is_active = models.BooleanField(default=True)
+    
+    def __str__(self):
+        return self.name
+
+class MovieStreamingAvailability(models.Model):
+    movie = models.ForeignKey(Movie, on_delete=models.CASCADE)
+    provider = models.ForeignKey(StreamingProvider, on_delete=models.CASCADE)
+    url = models.URLField(blank=True)  # Direct link if available
+    monetization_type = models.CharField(max_length=20, choices=[
+        ('flatrate', 'Subscription'),
+        ('buy', 'Buy'),
+        ('rent', 'Rent'),
+    ])
+    last_updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['movie', 'provider']

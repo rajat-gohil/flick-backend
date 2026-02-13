@@ -27,6 +27,7 @@ from .views import (
     UpdateUsernameView,
     PasswordResetRequestView,
     PasswordResetConfirmView,
+    MovieStreamingOptionsView,
 
     )
 
@@ -58,6 +59,7 @@ urlpatterns = [
     path('users/update-username/', UpdateUsernameView.as_view()),
     path('auth/password-reset/', PasswordResetRequestView.as_view()),
     path('auth/password-reset-confirm/', PasswordResetConfirmView.as_view()),
+    path('movies/<int:movie_id>/streaming-options/', MovieStreamingOptionsView.as_view(), name='movie-streaming-options'),
 
 ]
 

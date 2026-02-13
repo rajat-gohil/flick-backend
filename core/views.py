@@ -1479,3 +1479,41 @@ class PasswordResetConfirmView(APIView):
                 "success": False,
                 "error": "Invalid or expired reset link"
             }, status=400)
+
+class MovieStreamingOptionsView(APIView):
+    """
+    Get streaming options for a movie
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, movie_id):
+        try:
+            # Get movie
+            movie = Movie.objects.get(id=movie_id)
+            
+            # Get streaming options
+            streaming_options = MovieStreamingAvailability.objects.filter(
+                movie=movie
+            ).select_related('provider')
+            
+            providers_data = []
+            for option in streaming_options:
+                providers_data.append({
+                    'name': option.provider.name,
+                    'logo_url': option.provider.logo_url,
+                    'url': option.url or option.provider.website_url,
+                    'type': option.monetization_type,
+                })
+            
+            return Response({
+                "success": True,
+                "movie_title": movie.title,
+                "providers": providers_data
+            })
+            
+        except Movie.DoesNotExist:
+            return Response({
+                "success": False,
+                "error": "Movie not found"
+            }, status=404)
